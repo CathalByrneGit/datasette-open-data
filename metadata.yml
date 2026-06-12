@@ -1,0 +1,62 @@
+
+plugins:
+  datasette-open-data: {}
+  datasette-llm:
+    default_model: "openrouter/deepseek/deepseek-v4-flash"
+  datasette-agent-micropython:
+    max_sessions: 8
+    wall_clock_timeout_seconds: 10.0
+    memory_bytes: 33554432
+    fuel: 100000000
+
+settings:
+  default_allow_sql: true
+  sql_time_limit_ms: 15000
+  max_returned_rows: 15000
+  facet_time_limit_ms: 3000
+  suggest_facets: true
+  extra_css_urls:
+    - /static/custom.css
+
+databases:
+  catalog:
+    title: "Open Data Catalog"
+    description: "Indexed metadata from configured open data portals"
+
+    tables:
+      providers:
+        title: "Providers"
+
+      packages:
+        title: "Datasets"
+
+      resources:
+        title: "Resources"
+
+      organizations:
+        title: "Organizations"
+
+      groups:
+        title: "Groups"
+
+      tags:
+        title: "Tags"
+
+      package_tags:
+        title: "Dataset Tags"
+
+      package_groups:
+        title: "Dataset Groups"
+
+      packages_fts:
+        hidden: true
+
+      packages_fts_map:
+        hidden: true
+
+      catalog_runs:
+        hidden: true
+
+  data:
+    title: "Loaded Datasets"
+    description: "Datasets loaded from open data portals"

@@ -1,145 +1,278 @@
 # datasette-open-data
 
-A provider-based Datasette plugin for finding and loading datasets from open data portals.
+A provider-based Datasette plugin for discovering, cataloging, searching and loading datasets from open data portals.
 
-The first provider is **CKAN**, tested against the Central Bank of Ireland Open Data Portal:
+`datasette-open-data` combines:
 
-- Portal: https://opendata.centralbank.ie
-- CKAN API: https://opendata.centralbank.ie/api/3
-- CKAN DataStore API: https://opendata.centralbank.ie/en_GB/api/3/action/datastore_search
+* Live provider APIs (currently CKAN)
+* A local SQLite metadata catalog
+* Datasette browsing and search
+* Resource loading into SQLite
+* Agent tooling for dataset discovery and analysis
+
+The project currently supports CKAN portals including:
+
+* Central Bank of Ireland Open Data Portal
+* data.gov.ie
+
+with future support planned for:
+
+* PxWeb / PxStat
+* Socrata
+* ArcGIS Hub
+* Other open-data ecosystems
+
+---
 
 ## Why this exists
 
-`datasette-open-data` is intended to become a generic open-data layer for Datasette:
+Most open data portals provide APIs for searching and downloading datasets, but they do not provide a unified experience for:
 
 ```text
-search portal
-    ↓
-inspect dataset
-    ↓
-load resource
-    ↓
-query in Datasette
+discover dataset
+      ↓
+inspect metadata
+      ↓
+preview resources
+      ↓
+load into SQLite
+      ↓
+query with Datasette
+      ↓
+analyze with agents
 ```
 
-It starts with CKAN because CKAN provides a standard catalog model:
+`datasette-open-data` aims to become a generic open-data layer for Datasette.
 
-- Packages (datasets)
-- Resources
-- Groups
-- Organizations
-- Tags
-- DataStore resources
+---
 
-The long-term goal is to support additional open-data providers such as:
+## Architecture
 
-- PxStat
-- Socrata
-- ArcGIS
-- Other catalog APIs
+The project is built around two SQLite databases:
 
-through a shared provider interface.
+### catalog.db
+
+A local metadata warehouse generated from provider APIs.
+
+Contains:
+
+* Providers
+* Datasets
+* Resources
+* Organizations
+* Groups
+* Tags
+* FTS search index
+
+Purpose:
+
+```text
+Discovery
+Search
+Navigation
+Catalog browsing
+```
+
+### data.db
+
+Contains datasets loaded from open data portals.
+
+Purpose:
+
+```text
+Analysis
+SQL queries
+Charts
+Agent workflows
+```
+
+---
 
 ## Features
 
-Current functionality:
+### Catalog
 
-- CKAN package search
-- CKAN dataset details
-- CKAN groups
-- CKAN organizations
-- CKAN tags
-- CKAN DataStore preview
-- Resource loading into SQLite
-- Automatic DataStore vs CSV detection
-- Provider registry
-- Central Bank provider configuration included by default
+* Multi-provider support
+* Local metadata warehouse
+* Full-text search (FTS5)
+* Browse by organization
+* Browse by group
+* Browse by tag
+* Recently updated datasets
+
+### CKAN
+
+* Package search
+* Dataset metadata
+* Organizations
+* Groups
+* Tags
+* DataStore preview
+
+### Resource Loading
+
+* CKAN DataStore resources
+* CSV resources
+* Automatic format detection
+* Automatic schema creation
+* Incremental column discovery
+
+### Datasette
+
+* Open Data homepage
+* Search interface
+* Dataset pages
+* Resource previews
+* Resource loading
+* Catalog browsing
+
+### Agents
+
+* Search catalog
+* Inspect datasets
+* Load resources
+* Inspect loaded tables
+* Sample data
+
+---
 
 ## Installation
 
-### Using uv (recommended)
+Install dependencies:
 
 ```bash
 uv sync
 ```
 
-### Editable development install
+Development install:
 
 ```bash
 uv pip install -e .
 ```
 
+---
+
+## Configuration
+
+### providers.yml
+
+Provider definitions live in:
+
+```text
+providers.yml
+```
+
+Example:
+
+```yaml
+providers:
+  centralbank:
+    type: ckan
+    title: Central Bank of Ireland Open Data Portal
+    base_url: https://opendata.centralbank.ie
+    api_base_url: https://opendata.centralbank.ie/api/3
+    datastore_api_base_url: https://opendata.centralbank.ie/en_GB/api/3
+
+  datagovie:
+    type: ckan
+    title: data.gov.ie
+    base_url: https://data.gov.ie
+    api_base_url: https://data.gov.ie/api/3
+```
+
+---
+
+## Building the Catalog
+
+Generate catalog metadata:
+
+```bash
+uv run python scripts/build_catalog.py --provider centralbank
+```
+
+Add data.gov.ie:
+
+```bash
+uv run python scripts/build_catalog.py --provider datagovie --limit 500
+```
+
+Build both:
+
+```bash
+uv run python scripts/build_catalog.py --provider centralbank
+uv run python scripts/build_catalog.py --provider datagovie --limit 500
+```
+
+This creates:
+
+```text
+catalog.db
+```
+
+---
+
+## Creating a Data Database
+
+Create an empty database for imported datasets:
+
+```bash
+uv run python scripts/create_db.py
+```
+
+This creates:
+
+```text
+data.db
+```
+
+---
+
 ## Running Datasette
 
-### Search and browse only
+Start Datasette with both databases:
 
 ```bash
-uv run datasette -m examples/metadata.yml --memory
+uv run datasette serve data.db catalog.db \
+  -m metadata.yml \
+  --template-dir datasette_open_data/templates \
+  --static static:static \
+  --internal internal.db \
+  --port 8001 \
+  --root \
+  --reload
 ```
 
-### Search, browse and load resources
-
-Use a file-backed SQLite database:
-
-```bash
-uv run datasette data.db -m examples/metadata.yml
+```text
+http://127.0.0.1:8001/-/open-data
 ```
 
-**Important**
-
-Resource loading requires a file-backed SQLite database.
-
-This will NOT work:
-
-```bash
-uv run datasette --memory
-```
-
-because there is no database file available for imported resources.
+---
 
 ## Available Routes
 
-### Plugin Home
+### Homepage
 
 ```text
 /-/open-data
 ```
 
-Lists configured providers.
-
----
+Open Data explorer.
 
 ### Search
 
 ```text
-/-/open-data/search?q=card
+/-/open-data/search?q=mortgage
 ```
 
-JSON:
+Search datasets.
 
-```text
-/-/open-data/search?q=card&_format=json
-```
-
-Returns CKAN datasets matching the search term.
-
----
-
-### Dataset Details
+### Dataset
 
 ```text
 /-/open-data/dataset/{dataset_id}
 ```
 
-Example:
-
-```text
-/-/open-data/dataset/monthly-card-payment-statistics
-```
-
-Returns dataset metadata and available resources.
-
----
+View dataset metadata and resources.
 
 ### Resource Preview
 
@@ -147,15 +280,7 @@ Returns dataset metadata and available resources.
 /-/open-data/resource/{resource_id}/preview
 ```
 
-Example:
-
-```text
-/-/open-data/resource/0c86bb22-83c4-47ee-973e-07736b36a021/preview
-```
-
-Returns a sample of rows from a CKAN DataStore resource.
-
----
+Preview DataStore records.
 
 ### Resource Load
 
@@ -163,185 +288,115 @@ Returns a sample of rows from a CKAN DataStore resource.
 /-/open-data/resource/{resource_id}/load
 ```
 
-Example:
+Load a resource into `data.db`.
 
-```text
-/-/open-data/resource/0c86bb22-83c4-47ee-973e-07736b36a021/load
-```
-
-This will:
-
-1. Resolve the CKAN resource
-2. Detect whether it is:
-   - a DataStore resource
-   - a CSV resource
-3. Load records into SQLite
-4. Create a Datasette table
-5. Redirect to the imported table
-
-Optional parameters:
-
-```text
-?provider=centralbank
-```
-
-```text
-?table=my_table
-```
-
-```text
-?limit=50000
-```
-
-## Resource Loading
-
-The loader currently supports:
-
-### CKAN DataStore
-
-Loads rows using:
-
-```text
-datastore_search
-```
-
-with automatic paging.
-
-### CSV
-
-Downloads and imports CSV resources directly into SQLite.
-
-### Automatic Detection
-
-```python
-if resource.datastore_active:
-    load_datastore_resource(...)
-elif resource.format == "csv":
-    load_csv_url(...)
-```
+---
 
 ## CLI Loading
 
-You can also load resources outside Datasette.
-
-### CKAN Resource
+Load a CKAN resource:
 
 ```bash
 open-data-load \
   --provider centralbank \
-  --resource-id 0c86bb22-83c4-47ee-973e-07736b36a021 \
-  --database centralbank.db \
-  --table centralbank_resource
-```
-
-### CSV URL
-
-```bash
-open-data-load \
-  --csv-url "https://example.com/data.csv" \
+  --resource-id RESOURCE_ID \
   --database data.db \
   --table my_table
 ```
 
-## Datasette Configuration
+Load a CSV:
 
-Example `metadata.yml`:
-
-```yaml
-plugins:
-  datasette-open-data:
-    providers:
-      centralbank:
-        type: ckan
-        title: Central Bank of Ireland Open Data Portal
-        base_url: https://opendata.centralbank.ie
-        api_base_url: https://opendata.centralbank.ie/api/3
-        datastore_api_base_url: https://opendata.centralbank.ie/en_GB/api/3
+```bash
+open-data-load \
+  --csv-url https://example.com/file.csv \
+  --database data.db \
+  --table my_table
 ```
 
-If no configuration is provided, the plugin automatically falls back to the Central Bank provider.
+---
 
-## Architecture
+## Agent Tools
+
+The plugin exposes agent tools for:
+
+* Listing providers
+* Searching the catalog
+* Inspecting datasets
+* Loading resources
+* Listing loaded tables
+* Describing tables
+* Sampling rows
+
+This enables workflows such as:
 
 ```text
-OpenDataProvider (Protocol)
-           │
-           ▼
-     CKANProvider
-           │
-           ▼
-  Dataset / Resource models
-           │
-           ▼
-         Loader
-           │
-           ▼
-        SQLite
-           │
-           ▼
-       Datasette
+Find mortgage datasets
+        ↓
+Inspect metadata
+        ↓
+Load dataset
+        ↓
+Query data
+        ↓
+Analyze results
 ```
 
-Providers return internal dataclasses rather than raw CKAN JSON.
+---
 
-This makes future providers easier to add.
+## Project Structure
 
-## Current Scope
+```text
+datasette-open-data/
+├── datasette_open_data/
+├── templates/
+├── static/
+├── scripts/
+│   ├── build_catalog.py
+│   └── create_db.py
+├── providers.yml
+├── datasette.yml
+├── catalog.db
+└── data.db
+```
+
+---
+
+## Current Providers
 
 ### Implemented
 
-- Provider registry
-- CKAN provider
-- Dataset models
-- Resource models
-- Package search
-- Dataset details
-- Groups
-- Organizations
-- Tags
-- DataStore preview
-- SQLite loading
-- DataStore paging
-- CSV imports
-- Resource auto-detection
-- Datasette integration routes
+* CKAN
 
 ### Planned
 
-- PxStat provider
-- Socrata provider
-- ArcGIS provider
-- XLSX loading
-- JSON-STAT loading
-- Geospatial normalization
-- Agent tools
-- Multi-database selection
-- Background imports
-- Cached dataset metadata
+* PxWeb / PxStat
+* Socrata
+* ArcGIS Hub
+* OpenSpending
+* Generic JSON APIs
 
-## Development Notes
+---
 
-Run the project using:
+## Roadmap
 
-```bash
-uv run python scripts/build_catalog.py --provider centralbank
-uv run python scripts/build_catalog.py --provider datagovie --limit 500 # Limit how much datasets
-uv run python scripts/dev.py
-```
+### Near Term
 
-If you make code changes:
+* Better catalog search
+* Richer resource previews
+* Agent integration
+* Catalog refresh tooling
 
-```bash
-uv sync
-```
+### Future
 
-or
+* XLSX loading
+* JSON-STAT loading
+* Geospatial normalization
+* Background imports
+* Scheduled catalog refresh
+* Hybrid semantic search
+* Provider-specific plugins
 
-```bash
-uv pip install -e .
-```
-
-then restart Datasette.
+---
 
 ## License
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datasette import hookimpl
 
+from .agent_tools import register_open_data_agent_tools
 from .views import (
     dataset_view,
     groups_view,
@@ -36,3 +37,8 @@ def menu_links(datasette, actor):
             "label": "Open Data",
         }
     ]
+
+
+@hookimpl
+def register_agent_tools(datasette):
+    return register_open_data_agent_tools(datasette)

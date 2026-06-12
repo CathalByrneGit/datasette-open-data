@@ -1,0 +1,572 @@
+/* --- RESILIENT / LOW-TECH OPEN DATA SKIN FOR DATASETTE --- */
+
+:root {
+  --bg-color: #f5edcf;
+  --dot-color: rgba(59, 100, 210, 0.12);
+  --text-color: #1a1a1a;
+  --link-color: #1a1a1a;
+  --border-color: #c9bfa0;
+  --color-border: #c9bfa0;
+  --accent-bg: rgba(100, 70, 0, 0.05);
+  --accent-strong: #174f66;
+  --accent-green: #176b4d;
+}
+
+/* ==========================================================================
+   Global
+   ========================================================================== */
+
+body {
+  background-color: var(--bg-color) !important;
+  background-image: radial-gradient(var(--dot-color) 1px, transparent 1px) !important;
+  background-size: 16px 16px !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  color: var(--text-color) !important;
+}
+
+/* ==========================================================================
+   Datasette chrome
+   ========================================================================== */
+
+.hd,
+.ft,
+.db-table,
+.sql-write,
+.metadata {
+  background: transparent !important;
+  border-color: var(--border-color) !important;
+}
+
+.hd,
+.hd nav,
+.hd a,
+.hd summary,
+.hd p,
+.hd svg {
+  color: #1a1a1a !important;
+  fill: #1a1a1a !important;
+}
+
+.hd details.details-menu > summary {
+  cursor: pointer !important;
+  list-style: none !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+}
+
+.nav-menu-inner {
+  background: #1a1a1a !important;
+  border: 1px solid #444 !important;
+  border-radius: 3px !important;
+}
+
+.nav-menu-inner ul {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0;
+}
+
+.nav-menu-inner a,
+.nav-menu-inner button {
+  color: #f0e8d0 !important;
+  border-bottom: none !important;
+  display: block;
+  padding: 0.4rem 1rem;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.nav-menu-inner a:hover,
+.nav-menu-inner button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-bottom: none !important;
+}
+
+/* ==========================================================================
+   Links / text
+   ========================================================================== */
+
+a {
+  color: var(--link-color) !important;
+  text-decoration: none !important;
+}
+
+.content a,
+.open-data-wrap a {
+  border-bottom: 1px solid var(--text-color);
+}
+
+.content a:hover,
+.open-data-wrap a:hover {
+  border-bottom-style: dashed;
+}
+
+code,
+pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  background: var(--accent-bg) !important;
+  border-radius: 0 !important;
+}
+
+/* ==========================================================================
+   Forms / buttons
+   ========================================================================== */
+
+select,
+input[type="text"],
+input[type="search"],
+textarea {
+  background: rgba(255, 255, 255, 0.45) !important;
+  border: 1px solid var(--text-color) !important;
+  border-radius: 0 !important;
+  padding: 7px 10px !important;
+  color: var(--text-color) !important;
+}
+
+button,
+input[type="submit"],
+.open-data-btn,
+.search-form button {
+  background: rgba(255, 255, 255, 0.72) !important;
+  color: var(--text-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 0 !important;
+  padding: 7px 12px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+  opacity: 1 !important;
+  filter: none !important;
+  text-shadow: none !important;
+}
+
+button:hover,
+input[type="submit"]:hover,
+.open-data-btn:hover,
+.search-form button:hover {
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: var(--text-color) !important;
+  border-color: var(--text-color) !important;
+}
+
+/* ==========================================================================
+   Datasette page layout
+   ========================================================================== */
+
+.page-header {
+  max-width: none !important;
+  margin-left: 20px !important;
+  margin-right: 20px !important;
+}
+
+.page-header h1 {
+  text-align: left !important;
+}
+
+.metadata,
+.sql-write {
+  max-width: 1080px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+form.filters,
+.suggested-facets,
+p.export-links,
+p.sql-link {
+  margin-left: 20px !important;
+  margin-right: 20px !important;
+}
+
+/* ==========================================================================
+   Datasette table pages
+   ========================================================================== */
+
+.table-wrapper {
+  max-width: none !important;
+  overflow-x: auto !important;
+  margin-left: 20px !important;
+  margin-right: 20px !important;
+}
+
+table.rows-and-columns {
+  border-collapse: collapse !important;
+  background: transparent !important;
+  width: auto !important;
+  min-width: 900px !important;
+  margin-top: 20px !important;
+}
+
+table.rows-and-columns th {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-size: 0.85rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--accent-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  padding: 8px 12px !important;
+  white-space: nowrap !important;
+}
+
+table.rows-and-columns td {
+  border: 1px solid var(--border-color) !important;
+  padding: 8px 12px !important;
+  font-size: 0.95rem !important;
+  white-space: nowrap !important;
+}
+
+table.rows-and-columns th,
+table.rows-and-columns td {
+  max-width: 420px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* ==========================================================================
+   Open Data layout
+   ========================================================================== */
+
+.open-data-wrap {
+  max-width: 1080px !important;
+  margin: 2rem auto !important;
+  padding: 0 1rem !important;
+}
+
+.open-data-hero,
+.open-data-card {
+  background: rgba(255, 255, 255, 0.42) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 0 !important;
+  padding: 1.35rem 1.5rem !important;
+  margin-bottom: 1.4rem !important;
+  box-shadow: none !important;
+}
+
+.open-data-hero h1 {
+  margin-top: 0 !important;
+  font-size: 2rem !important;
+  line-height: 1.1 !important;
+}
+
+.open-data-sub {
+  color: #4a4030 !important;
+  margin-bottom: 1rem !important;
+}
+
+.open-data-card h2 {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-size: 0.75rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.16em !important;
+  color: #5d5440 !important;
+  margin: 0 0 1rem !important;
+}
+
+.search-form {
+  display: flex !important;
+  gap: 0.5rem !important;
+  flex-wrap: wrap !important;
+}
+
+.search-form select {
+  min-width: 260px !important;
+}
+
+.search-form input[type="search"] {
+  flex: 1 !important;
+  min-width: 260px !important;
+}
+
+/* ==========================================================================
+   Catalog cards
+   ========================================================================== */
+
+.catalog-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)) !important;
+  gap: 0.85rem !important;
+}
+
+.catalog-tile {
+  display: block !important;
+  background: rgba(255, 255, 255, 0.36) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 0 !important;
+  padding: 0.9rem 1rem !important;
+  color: var(--text-color) !important;
+  text-decoration: none !important;
+  transition: background 0.12s ease, transform 0.12s ease !important;
+}
+
+.catalog-tile:hover {
+  background: rgba(255, 255, 255, 0.62) !important;
+  transform: translateY(-1px);
+  border-bottom: 1px solid var(--text-color) !important;
+}
+
+.catalog-tile strong {
+  display: block !important;
+  color: var(--accent-green) !important;
+  font-weight: 800 !important;
+  margin-bottom: 0.35rem !important;
+}
+
+.catalog-tile.is-selected {
+  background: rgba(100, 70, 0, 0.08) !important;
+  border: 2px solid var(--text-color) !important;
+}
+
+.catalog-meta,
+.result-meta,
+.resource-meta,
+.recent-meta {
+  color: #5d5440 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-size: 0.8rem !important;
+}
+
+/* ==========================================================================
+   Tags
+   ========================================================================== */
+
+.tag-list {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.45rem !important;
+  list-style: none !important;
+  padding: 0 !important;
+}
+
+.tag-list a {
+  display: inline-block !important;
+  background: rgba(255, 255, 255, 0.36) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 0 !important;
+  padding: 0.25rem 0.55rem !important;
+  color: var(--accent-strong) !important;
+  font-size: 0.85rem !important;
+}
+
+.tag-list a:hover {
+  background: rgba(255, 255, 255, 0.62) !important;
+}
+
+/* ==========================================================================
+   Search results / recent lists
+   ========================================================================== */
+
+.recent-list,
+.result-list,
+.resource-list {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.recent-list li,
+.result-item,
+.resource-item {
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 0.8rem 0 !important;
+}
+
+.recent-list li:last-child,
+.result-item:last-child,
+.resource-item:last-child {
+  border-bottom: none !important;
+}
+
+.recent-title a,
+.result-title a,
+.resource-title {
+  color: var(--accent-strong) !important;
+  font-weight: 800 !important;
+}
+
+.result-notes,
+.resource-desc,
+.dataset-notes {
+  color: #3f3628 !important;
+  line-height: 1.55 !important;
+}
+
+/* ==========================================================================
+   Dataset resource cards
+   ========================================================================== */
+
+.resource-item {
+  background: rgba(255, 255, 255, 0.28) !important;
+  border: 1px solid var(--border-color) !important;
+  margin-bottom: 0.65rem !important;
+  padding: 0.85rem !important;
+}
+
+.resource-actions {
+  display: flex !important;
+  gap: 0.5rem !important;
+  flex-wrap: wrap !important;
+  margin-top: 0.75rem !important;
+}
+
+.resource-actions a,
+.resource-actions a:link,
+.resource-actions a:visited,
+.resource-actions a:hover,
+.resource-actions .open-data-btn,
+.resource-actions .open-data-btn:link,
+.resource-actions .open-data-btn:visited,
+.resource-actions .open-data-btn:hover,
+.resource-actions .open-data-btn-outline,
+.resource-actions .open-data-btn-outline:link,
+.resource-actions .open-data-btn-outline:visited,
+.resource-actions .open-data-btn-outline:hover {
+  background: rgba(255, 255, 255, 0.72) !important;
+  color: var(--text-color) !important;
+  border: 1px solid var(--border-color) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  border-radius: 0 !important;
+  padding: 0.55rem 0.8rem !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+  opacity: 1 !important;
+  filter: none !important;
+  text-shadow: none !important;
+}
+
+.resource-actions a:hover,
+.resource-actions .open-data-btn:hover,
+.resource-actions .open-data-btn-outline:hover {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: var(--text-color) !important;
+  border-bottom-style: solid !important;
+}
+
+.resource-actions a:empty,
+.resource-actions button:empty {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Preview table
+   ========================================================================== */
+
+.preview-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  background: transparent !important;
+}
+
+.preview-table th,
+.preview-table td {
+  border: 1px solid var(--border-color) !important;
+  padding: 0.5rem !important;
+}
+
+.preview-table th {
+  background: var(--accent-bg) !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+}
+
+/* ==========================================================================
+   Agent chat UI
+   ========================================================================== */
+
+.agent-message-assistant {
+  position: relative;
+  background: rgba(255, 255, 255, 0.5) !important;
+  color: var(--text-color) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.agent-message-assistant .agent-message-content pre,
+.agent-message-assistant .agent-message-content code,
+.agent-message-assistant .agent-message-content th {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+.agent-tool-call,
+.agent-tool-result {
+  background: rgba(255, 255, 255, 0.4) !important;
+  border-color: var(--border-color) !important;
+}
+
+.agent-input textarea,
+.agent-new-chat textarea {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-color) !important;
+}
+
+.export-menu {
+  background: #1a1a1a !important;
+  border-color: #333 !important;
+}
+
+.export-menu-btn {
+  color: #f0e8d0 !important;
+}
+
+.export-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Copy button on assistant messages */
+.copy-msg-btn {
+  display: none;
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  cursor: pointer;
+  color: var(--text-color);
+  font-family: ui-monospace, monospace;
+}
+
+.agent-message-assistant:hover .copy-msg-btn {
+  display: block;
+}
+
+.copy-msg-btn:hover {
+  background: rgba(255,255,255,0.95);
+}
+
+/* ==========================================================================
+   Mobile
+   ========================================================================== */
+
+@media (max-width: 760px) {
+  body {
+    padding: 0 !important;
+  }
+
+  .open-data-wrap {
+    margin: 1rem auto !important;
+  }
+
+  .search-form {
+    flex-direction: column !important;
+  }
+
+  .search-form input[type="search"],
+  .search-form select {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .catalog-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .table-wrapper {
+    margin-left: 0.5rem !important;
+    margin-right: 0.5rem !important;
+  }
+}
