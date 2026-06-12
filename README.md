@@ -324,9 +324,9 @@ This makes future providers easier to add.
 Run the project using:
 
 ```bash
-uv run python scripts/build_catalog.py 
+uv run python scripts/build_catalog.py --provider centralbank
+uv run python scripts/build_catalog.py --provider datagovie --limit 500 # Limit how much datasets
 uv run python scripts/dev.py
-uv run datasette data.db catalog.db -m examples/metadata.yml
 ```
 
 If you make code changes:
