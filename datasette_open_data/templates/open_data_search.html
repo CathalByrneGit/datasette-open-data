@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Search Open Data{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+  .open-data-wrap {
+    max-width: 1000px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+  }
+
+  .open-data-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255,255,255,0.45);
+  }
+
+  .search-form {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .search-form input {
+    flex: 1;
+    min-width: 240px;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 1rem;
+  }
+
+  .search-form button {
+    padding: 0.55rem 1rem;
+    border-radius: 5px;
+    border: 1px solid var(--text-color);
+    background: var(--text-color);
+    color: var(--bg-color);
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .result-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .result-item {
+    border-bottom: 1px solid var(--border-color);
+    padding: 1rem 0;
+  }
+
+  .result-item:last-child {
+    border-bottom: none;
+  }
+
+  .result-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+  }
+
+  .result-title a {
+    text-decoration: none;
+  }
+
+  .result-notes {
+    color: #666;
+    line-height: 1.45;
+    margin: 0.35rem 0 0.5rem;
+  }
+
+  .result-meta {
+    color: #777;
+    font-size: 0.82rem;
+    font-family: ui-monospace, monospace;
+  }
+
+  .search-source {
+    margin-bottom: 1rem;
+    color: #666;
+    font-size: 0.9rem;
+  }
+
+  .empty-state {
+    color: #888;
+    font-style: italic;
+  }
+
+  .back-link {
+    margin-bottom: 1rem;
+  }
+
+  .provider-badge {
+    display: inline-block;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="open-data-wrap">
+
+  <p class="back-link">
+    <a href="/-/open-data">&larr; Open Data Explorer</a>
+  </p>
+
+  <h1>Search Open Data</h1>
+
+  <div class="open-data-card">
+    <form class="search-form" method="get" action="/-/open-data/search">
+      <input type="hidden" name="provider" value="{{ provider.name }}">
+
+      <input
+        type="search"
+        name="q"
+        value="{{ q or '' }}"
+        placeholder="Search datasets"
+      >
+
+      <button type="submit">Search</button>
+    </form>
+  </div>
+
+  <div class="open-data-card">
+
+    <div class="search-source">
+      Search source:
+      {% if search_source == "catalog" %}
+        <strong>local catalog.db</strong>
+        ·
+        <a href="/-/open-data/search?q={{ q }}&provider={{ provider.name }}&source=live">
+          try live CKAN search
+        </a>
+
+      {% elif search_source == "live-fallback" %}
+        <strong>live CKAN API fallback</strong>
+
+      {% else %}
+        <strong>live CKAN API</strong>
+      {% endif %}
+    </div>
+
+    <h2>
+      {{ count }} result{% if count != 1 %}s{% endif %}
+    </h2>
+
+    {% if results %}
+
+      <ul class="result-list">
+
+        {% for dataset in results %}
+          <li class="result-item">
+
+            <div class="result-title">
+              <a href="/-/open-data/dataset/{{ dataset.id }}?provider={{ dataset.provider }}">
+                {{ dataset.title }}
+              </a>
+
+              <span class="provider-badge">
+                {{ dataset.provider }}
+              </span>
+            </div>
+
+            {% if dataset.notes %}
+              <p class="result-notes">
+                {{ dataset.notes | truncate(260) }}
+              </p>
+            {% endif %}
+
+            <div class="result-meta">
+              {{ dataset.resource_count }}
+              resource{% if dataset.resource_count != 1 %}s{% endif %}
+
+              {% if dataset.organization %}
+                · {{ dataset.organization }}
+              {% endif %}
+            </div>
+
+          </li>
+        {% endfor %}
+
+      </ul>
+
+    {% else %}
+
+      <p class="empty-state">
+        No datasets found.
+      </p>
+
+    {% endif %}
+
+  </div>
+
+</div>
+{% endblock %}

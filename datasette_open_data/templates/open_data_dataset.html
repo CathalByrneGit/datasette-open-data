@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dataset.title }}{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+  .open-data-wrap { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+  .back-link { margin-bottom: 1rem; }
+
+  .open-data-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.35rem 1.5rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255,255,255,0.55);
+  }
+
+  .dataset-notes { color: #555; line-height: 1.55; margin-top: 0; }
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem 0 0;
+    margin: 0.75rem 0 0;
+    list-style: none;
+    border-top: 1px solid var(--border-color);
+  }
+  .tag-list li {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.85rem;
+    background: rgba(255,255,255,0.8);
+  }
+
+  .resource-list { list-style: none; margin: 0; padding: 0; }
+  .resource-item {
+    display: grid;
+    grid-template-columns: 42px 1fr auto;
+    gap: 1rem;
+    align-items: center;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.85rem;
+    margin-bottom: 0.75rem;
+    background: rgba(255,255,255,0.7);
+  }
+
+  .resource-icon {
+    width: 34px;
+    height: 42px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    display: grid;
+    place-items: center;
+    font-family: ui-monospace, monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: white;
+  }
+
+  .resource-title { font-weight: 700; font-size: 1rem; }
+  .resource-desc { color: #666; font-size: 0.9rem; margin: 0.25rem 0 0; }
+  .resource-meta {
+    color: #777;
+    font-size: 0.84rem;
+    font-family: ui-monospace, monospace;
+    margin-top: 0.15rem;
+  }
+
+  .resource-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .open-data-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 0.9rem;
+    background: var(--text-color);
+    color: var(--bg-color) !important;
+    border: 1px solid var(--text-color);
+    border-radius: 5px;
+    text-decoration: none !important;
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+
+  .open-data-btn-outline {
+    background: transparent;
+    color: var(--text-color) !important;
+  }
+
+  .open-data-btn-primary {
+    background: #2474a6;
+    border-color: #2474a6;
+    color: white !important;
+  }
+
+  @media (max-width: 760px) {
+    .resource-item {
+      grid-template-columns: 42px 1fr;
+    }
+    .resource-actions {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
+      margin-top: 0.5rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="open-data-wrap">
+  <p class="back-link">
+    <a href="/-/open-data/search?provider={{ provider.name }}">&larr; Search</a>
+  </p>
+
+  <h1>{{ dataset.title }}</h1>
+
+  <div class="open-data-card">
+    {% if dataset.notes %}
+      <div class="dataset-notes">{{ dataset.notes }}</div>
+    {% else %}
+      <p class="dataset-notes"><em>No description provided.</em></p>
+    {% endif %}
+
+    <p class="resource-meta">
+      Provider: {{ provider.title }}
+      {% if dataset.organization %} · Organization: {{ dataset.organization }}{% endif %}
+      {% if dataset.license_title %} · License: {{ dataset.license_title }}{% endif %}
+    </p>
+
+    {% if dataset.tags %}
+      <ul class="tag-list">
+        {% for tag in dataset.tags %}
+          <li>{{ tag }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+
+  <div class="open-data-card">
+    <h2>Resources</h2>
+
+    {% if dataset.resources %}
+      <ul class="resource-list">
+        {% for resource in dataset.resources %}
+          <li class="resource-item">
+            <div class="resource-icon">
+              {{ (resource.format or "file")[:4] | lower }}
+            </div>
+
+            <div>
+              <div class="resource-title">{{ resource.name or resource.id }}</div>
+
+              <div class="resource-meta">
+                {{ resource.format or "unknown format" }}
+                {% if resource.datastore_active %} · DataStore active{% endif %}
+              </div>
+
+              {% if resource.description %}
+                <p class="resource-desc">{{ resource.description }}</p>
+              {% endif %}
+            </div>
+
+            <div class="resource-actions">
+              {% if resource.datastore_active %}
+                <a class="open-data-btn open-data-btn-outline"
+                   href="/-/open-data/resource/{{ resource.id }}/preview?provider={{ provider.name }}">
+                  ◉ Preview
+                </a>
+              {% endif %}
+
+              <a class="open-data-btn open-data-btn-primary"
+                 href="/-/open-data/resource/{{ resource.id }}/load?provider={{ provider.name }}">
+                ◍ Load into Datasette
+              </a>
+
+              {% if resource.url %}
+                <a class="open-data-btn open-data-btn-outline"
+                   href="{{ resource.url }}">
+                  ⇩ Source file
+                </a>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p><em>No resources found.</em></p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+providers:
+  centralbank:
+    type: ckan
+    title: Central Bank of Ireland Open Data Portal
+    base_url: https://opendata.centralbank.ie
+    api_base_url: https://opendata.centralbank.ie/api/3
+    datastore_api_base_url: https://opendata.centralbank.ie/en_GB/api/3
+
+  datagovie:
+    type: ckan
+    title: data.gov.ie
+    base_url: https://data.gov.ie
+    api_base_url: https://data.gov.ie/api/3

@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# UV
+.python-version
+uv.lock
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Datasette
+*.db
+*.sqlite
+*.sqlite3
+
+# Local catalog builds
+catalog.db
+catalog.db-shm
+catalog.db-wal
+
+# Local Datasette databases
+data.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.*
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local provider overrides
+providers.local.yml
+
+# Datasette metadata overrides
+metadata.local.yml

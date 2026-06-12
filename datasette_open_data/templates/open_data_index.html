@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Open Data Explorer{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+  .open-data-wrap { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+
+  .open-data-hero {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255,255,255,0.55);
+  }
+
+  .open-data-hero h1 { margin-top: 0; }
+  .open-data-sub { color: #666; line-height: 1.5; }
+
+  .open-data-card {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255,255,255,0.45);
+  }
+
+  .open-data-card h2 {
+    font-size: 0.82rem;
+    font-family: ui-monospace, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #777;
+    margin: 0 0 1rem;
+  }
+
+  .search-form { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .search-form input,
+  .search-form select {
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 1rem;
+  }
+  .search-form input { flex: 1; min-width: 260px; }
+
+  .search-form button,
+  .open-data-btn {
+    padding: 0.55rem 1rem;
+    background: var(--text-color);
+    color: var(--bg-color) !important;
+    border: 1px solid var(--text-color);
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none !important;
+    font-weight: 600;
+  }
+
+  .catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+  }
+
+  .catalog-tile {
+    display: block;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    background: rgba(255,255,255,0.7);
+    text-decoration: none !important;
+    border-bottom: 1px solid var(--border-color) !important;
+  }
+
+  .catalog-tile:hover { background: rgba(255,255,255,0.95); }
+
+  .catalog-tile.is-selected {
+    border-color: var(--text-color);
+    background: rgba(255,255,255,0.95);
+  }
+
+  .catalog-tile strong {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+
+  .catalog-meta {
+    color: #777;
+    font-size: 0.82rem;
+    font-family: ui-monospace, monospace;
+  }
+
+  .recent-list,
+  .tag-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .recent-list li {
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.65rem 0;
+  }
+
+  .recent-list li:last-child { border-bottom: none; }
+
+  .recent-title {
+    font-weight: 700;
+  }
+
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .tag-list a {
+    display: inline-block;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 0.25rem 0.65rem;
+    background: rgba(255,255,255,0.75);
+    text-decoration: none !important;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border-color) !important;
+  }
+
+  .empty-state {
+    color: #888;
+    font-style: italic;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="open-data-wrap">
+
+  <div class="open-data-hero">
+    <h1>Open Data Explorer</h1>
+    <p class="open-data-sub">
+      Search open data portals, inspect datasets, preview resources, and load them into Datasette.
+    </p>
+
+    <form class="search-form" method="get" action="/-/open-data/search">
+      <select name="provider">
+        {% for name, provider in providers.items() %}
+          <option value="{{ name }}"{% if name == selected_provider %} selected{% endif %}>
+            {{ provider.title }}
+          </option>
+        {% endfor %}
+      </select>
+      <input type="search" name="q" placeholder="Search datasets, e.g. mortgage, card, credit" value="{{ q or '' }}">
+      <button type="submit">Search</button>
+    </form>
+  </div>
+
+  {% if catalog.available %}
+    <div class="open-data-card">
+      <h2>Catalog providers</h2>
+
+      {% if catalog.providers %}
+        <div class="catalog-grid">
+          {% for row in catalog.providers %}
+            <a class="catalog-tile{% if row.id == selected_provider %} is-selected{% endif %}"
+               href="/-/open-data?provider={{ row.id }}">
+              <strong>{{ row.title or row.id }}</strong>
+              <span class="catalog-meta">
+                {{ row.package_count }} dataset{% if row.package_count != 1 %}s{% endif %}
+                · {{ row.type }}
+              </span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-state">No catalog providers found.</p>
+      {% endif %}
+    </div>
+
+    <div class="open-data-card">
+      <h2>Browse by organization</h2>
+
+      {% if catalog.organizations %}
+        <div class="catalog-grid">
+          {% for row in catalog.organizations %}
+            <a class="catalog-tile" href="/-/open-data/search?provider={{ row.provider }}&organization_id={{ row.id }}">
+              <strong>{{ row.title or row.name or row.id }}</strong>
+              <span class="catalog-meta">
+                {{ row.package_count }} dataset{% if row.package_count != 1 %}s{% endif %}
+                · {{ row.provider }}
+              </span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-state">No organizations found for this provider.</p>
+      {% endif %}
+    </div>
+
+    <div class="open-data-card">
+      <h2>Browse by group</h2>
+
+      {% if catalog.groups %}
+        <div class="catalog-grid">
+          {% for row in catalog.groups %}
+            <a class="catalog-tile" href="/-/open-data/search?provider={{ row.provider }}&group_id={{ row.id }}">
+              <strong>{{ row.title or row.name or row.id }}</strong>
+              <span class="catalog-meta">
+                {{ row.package_count }} dataset{% if row.package_count != 1 %}s{% endif %}
+                · {{ row.provider }}
+              </span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-state">No groups found for this provider.</p>
+      {% endif %}
+    </div>
+
+    <div class="open-data-card">
+      <h2>Popular tags</h2>
+
+      {% if catalog.tags %}
+        <ul class="tag-list">
+          {% for row in catalog.tags %}
+            <li>
+              <a href="/-/open-data/search?provider={{ row.provider }}&tag={{ row.name }}">
+                {{ row.name }}
+                <span class="catalog-meta">({{ row.package_count }})</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-state">No tags found for this provider.</p>
+      {% endif %}
+    </div>
+
+    <div class="open-data-card">
+      <h2>Recently modified datasets</h2>
+
+      {% if catalog.recent_packages %}
+        <ul class="recent-list">
+          {% for row in catalog.recent_packages %}
+            <li>
+              <div class="recent-title">
+                <a href="/-/open-data/dataset/{{ row.id }}?provider={{ row.provider }}">{{ row.title or row.id }}</a>
+              </div>
+              <div class="catalog-meta">
+                {{ row.provider }}
+                {% if row.organization_title %} · {{ row.organization_title }}{% endif %}
+                {% if row.metadata_modified %} · modified {{ row.metadata_modified }}{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-state">No recent datasets found for this provider.</p>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="open-data-card">
+      <h2>Configured providers</h2>
+
+      <div class="catalog-grid">
+        {% for name, provider in providers.items() %}
+          <a class="catalog-tile" href="{{ provider.base_url }}">
+            <strong>{{ provider.title }}</strong>
+            <span class="catalog-meta">{{ provider.type }} · {{ provider.base_url }}</span>
+          </a>
+        {% endfor %}
+      </div>
+
+      <p class="open-data-sub" style="margin-top:1rem;">
+        Build a local catalog with:
+        <code>uv run python scripts/build_catalog.py</code>
+      </p>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}

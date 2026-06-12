@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Resource Preview{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+  .open-data-wrap { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+  .open-data-card {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255,255,255,0.35);
+  }
+  .preview-table-wrap { overflow-x: auto; }
+  .preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .preview-table th,
+  .preview-table td {
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.45rem 0.55rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .preview-table th {
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+  }
+  .open-data-btn {
+    display: inline-block;
+    padding: 0.45rem 0.9rem;
+    background: var(--text-color);
+    color: var(--bg-color) !important;
+    border: 1px solid var(--text-color);
+    border-radius: 4px;
+    text-decoration: none !important;
+    font-weight: 600;
+  }
+  .open-data-btn-outline {
+    background: transparent;
+    color: var(--text-color) !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="open-data-wrap">
+  <p><a href="/-/open-data">&larr; Open Data Explorer</a></p>
+
+  <h1>Resource Preview</h1>
+
+  <div class="open-data-card">
+    <p><strong>Provider:</strong> {{ provider.title }}</p>
+    <p><strong>Resource ID:</strong> <code>{{ resource_id }}</code></p>
+
+    <p>
+      <a class="open-data-btn"
+         href="/-/open-data/resource/{{ resource_id }}/load?provider={{ provider.name }}">
+        Load into Datasette
+      </a>
+
+      <a class="open-data-btn open-data-btn-outline"
+         href="/-/open-data/resource/{{ resource_id }}/preview?provider={{ provider.name }}&_format=json">
+        View JSON
+      </a>
+    </p>
+  </div>
+
+  <div class="open-data-card">
+    <h2>Preview rows</h2>
+
+    {% set records = preview.records or [] %}
+
+    {% if records %}
+      {% set columns = records[0].keys() %}
+
+      <div class="preview-table-wrap">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              {% for column in columns %}
+                <th>{{ column }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in records %}
+              <tr>
+                {% for column in columns %}
+                  <td>{{ row[column] }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p><em>No preview records returned.</em></p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
