@@ -5,7 +5,9 @@ from typing import Any
 
 import yaml
 
+from .providers.base import OpenDataProvider
 from .providers.ckan import CKANProvider
+from .providers.socrata import SocrataProvider
 
 
 DEFAULT_CONFIG = {
@@ -48,27 +50,33 @@ def plugin_config(datasette) -> dict[str, Any]:
     return file_config or DEFAULT_CONFIG
 
 
-def providers_from_config(config: dict[str, Any]) -> dict[str, CKANProvider]:
-    providers: dict[str, CKANProvider] = {}
+def providers_from_config(config: dict[str, Any]) -> dict[str, OpenDataProvider]:
+    providers: dict[str, OpenDataProvider] = {}
 
     for name, item in (config.get("providers") or {}).items():
         provider_type = item.get("type", "ckan")
 
-        if provider_type != "ckan":
-            raise ValueError(f"Unsupported provider type: {provider_type}")
-
-        providers[name] = CKANProvider(
-            name=name,
-            title=item.get("title"),
-            base_url=item["base_url"],
-            api_base_url=item.get("api_base_url"),
-            datastore_api_base_url=item.get("datastore_api_base_url"),
-        )
+        if provider_type == "ckan":
+            providers[name] = CKANProvider(
+                name=name,
+                title=item.get("title"),
+                base_url=item["base_url"],
+                api_base_url=item.get("api_base_url"),
+                datastore_api_base_url=item.get("datastore_api_base_url"),
+            )
+        elif provider_type == "socrata":
+            providers[name] = SocrataProvider(
+                name=name,
+                title=item.get("title"),
+                base_url=item["base_url"],
+            )
+        else:
+            raise ValueError(f"Unsupported provider type: {provider_type!r}")
 
     return providers
 
 
-def get_provider(datasette, name: str | None = None) -> CKANProvider:
+def get_provider(datasette, name: str | None = None) -> OpenDataProvider:
     providers = providers_from_config(plugin_config(datasette))
 
     if not providers:
@@ -78,6 +86,6 @@ def get_provider(datasette, name: str | None = None) -> CKANProvider:
         name = next(iter(providers))
 
     if name not in providers:
-        raise KeyError(f"Unknown open data provider: {name}")
+        raise KeyError(f"Unknown open data provider: {name!r}")
 
     return providers[name]

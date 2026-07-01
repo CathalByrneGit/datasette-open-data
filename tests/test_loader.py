@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import io
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from sqlite_utils import Database
 
 from datasette_open_data.loader import (
+    LoadError,
     _insert_rows,
     load_csv_url,
     load_datastore_resource,
@@ -126,6 +127,27 @@ async def test_load_datastore_resource_empty(tmp_path):
     assert count == 0
 
 
+async def test_load_datastore_resource_wraps_error(tmp_path):
+    db_path = str(tmp_path / "test.db")
+    provider = CKANProvider(name="test", base_url="http://example.com")
+
+    call_count = 0
+
+    async def fake_get(action, params=None, datastore=False):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return {"records": [{"x": 1}]}
+        raise RuntimeError("network failure")
+
+    provider._get = fake_get
+
+    with pytest.raises(LoadError, match="1 rows already written"):
+        await load_datastore_resource(
+            provider, "res-123", db_path, table="t", batch_size=1
+        )
+
+
 # ---------------------------------------------------------------------------
 # load_csv_url
 # ---------------------------------------------------------------------------
@@ -171,6 +193,42 @@ async def test_load_csv_url_sanitises_table_name(tmp_path):
     assert "my_table" in db.table_names()
 
 
+async def test_load_csv_url_raises_load_error_on_http_error(tmp_path):
+    db_path = str(tmp_path / "test.db")
+
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=httpx.HTTPStatusError(
+            "Not Found", request=MagicMock(), response=mock_response
+        )
+    )
+    mock_cls = MagicMock()
+    mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("datasette_open_data.loader.httpx.AsyncClient", mock_cls):
+        with pytest.raises(LoadError, match="HTTP 404"):
+            await load_csv_url("http://example.com/missing.csv", db_path, "t")
+
+
+async def test_load_csv_url_raises_load_error_on_timeout(tmp_path):
+    db_path = str(tmp_path / "test.db")
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=httpx.TimeoutException("timed out", request=MagicMock())
+    )
+    mock_cls = MagicMock()
+    mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("datasette_open_data.loader.httpx.AsyncClient", mock_cls):
+        with pytest.raises(LoadError, match="Timed out"):
+            await load_csv_url("http://example.com/slow.csv", db_path, "t")
+
+
 # ---------------------------------------------------------------------------
 # load_resource
 # ---------------------------------------------------------------------------
@@ -179,7 +237,6 @@ async def test_load_csv_url_sanitises_table_name(tmp_path):
 async def test_load_resource_datastore_path(tmp_path):
     db_path = str(tmp_path / "test.db")
     provider = CKANProvider(name="test", base_url="http://example.com")
-
     resource = Resource(id="res-1", name="mydata", datastore_active=True)
 
     async def fake_get(action, params=None, datastore=False):
@@ -194,7 +251,6 @@ async def test_load_resource_datastore_path(tmp_path):
 async def test_load_resource_csv_path(tmp_path):
     db_path = str(tmp_path / "test.db")
     provider = CKANProvider(name="test", base_url="http://example.com")
-
     resource = Resource(
         id="res-2", name="mycsv", format="CSV", url="http://example.com/data.csv"
     )
@@ -206,10 +262,19 @@ async def test_load_resource_csv_path(tmp_path):
     assert count == 1
 
 
+async def test_load_resource_csv_no_url_raises(tmp_path):
+    db_path = str(tmp_path / "test.db")
+    provider = CKANProvider(name="test", base_url="http://example.com")
+    resource = Resource(id="res-3", name="nourl", format="CSV", url=None)
+
+    with pytest.raises(LoadError, match="no URL to download from"):
+        await load_resource(provider, resource, db_path)
+
+
 async def test_load_resource_unsupported_raises(tmp_path):
     db_path = str(tmp_path / "test.db")
     provider = CKANProvider(name="test", base_url="http://example.com")
-    resource = Resource(id="res-3", name="weird", format="XLS")
+    resource = Resource(id="res-4", name="weird", format="XLS")
 
     with pytest.raises(ValueError, match="unsupported format"):
         await load_resource(provider, resource, db_path)

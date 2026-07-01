@@ -29,11 +29,40 @@ def test_providers_from_config_ckan():
     assert providers["myportal"].base_url == "https://data.example.com"
 
 
+def test_providers_from_config_socrata():
+    config = {
+        "providers": {
+            "nyc": {
+                "type": "socrata",
+                "title": "NYC Open Data",
+                "base_url": "https://data.cityofnewyork.us",
+            }
+        }
+    }
+    providers = providers_from_config(config)
+    assert "nyc" in providers
+    assert providers["nyc"].name == "nyc"
+    assert providers["nyc"].title == "NYC Open Data"
+    assert providers["nyc"].type == "socrata"
+
+
+def test_providers_from_config_mixed_types():
+    config = {
+        "providers": {
+            "ckan_portal": {"type": "ckan", "base_url": "https://ckan.example.com"},
+            "socrata_portal": {"type": "socrata", "base_url": "https://socrata.example.com"},
+        }
+    }
+    providers = providers_from_config(config)
+    assert providers["ckan_portal"].type == "ckan"
+    assert providers["socrata_portal"].type == "socrata"
+
+
 def test_providers_from_config_unsupported_type():
     config = {
         "providers": {
             "bad": {
-                "type": "socrata",
+                "type": "arcgis",
                 "base_url": "https://data.example.com",
             }
         }
