@@ -12,6 +12,11 @@ providers:
     base_url: https://data.gov.ie
     api_base_url: https://data.gov.ie/api/3
 
+  cso:
+    type: pxstat
+    title: Central Statistics Office Ireland
+    base_url: https://ws.cso.ie
+
   # Example Socrata portal — any Socrata-powered portal can be added with type: socrata
   # nycopendata:
   #   type: socrata

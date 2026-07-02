@@ -46,16 +46,47 @@ def test_providers_from_config_socrata():
     assert providers["nyc"].type == "socrata"
 
 
+def test_providers_from_config_pxstat():
+    config = {
+        "providers": {
+            "cso": {
+                "type": "pxstat",
+                "title": "Central Statistics Office Ireland",
+                "base_url": "https://ws.cso.ie",
+                "language": "en",
+            }
+        }
+    }
+    providers = providers_from_config(config)
+    assert "cso" in providers
+    assert providers["cso"].name == "cso"
+    assert providers["cso"].type == "pxstat"
+    assert providers["cso"].title == "Central Statistics Office Ireland"
+    assert providers["cso"].language == "en"
+
+
+def test_providers_from_config_pxstat_default_language():
+    config = {
+        "providers": {
+            "cso": {"type": "pxstat", "base_url": "https://ws.cso.ie"}
+        }
+    }
+    providers = providers_from_config(config)
+    assert providers["cso"].language == "en"
+
+
 def test_providers_from_config_mixed_types():
     config = {
         "providers": {
             "ckan_portal": {"type": "ckan", "base_url": "https://ckan.example.com"},
             "socrata_portal": {"type": "socrata", "base_url": "https://socrata.example.com"},
+            "pxstat_portal": {"type": "pxstat", "base_url": "https://ws.example.ie"},
         }
     }
     providers = providers_from_config(config)
     assert providers["ckan_portal"].type == "ckan"
     assert providers["socrata_portal"].type == "socrata"
+    assert providers["pxstat_portal"].type == "pxstat"
 
 
 def test_providers_from_config_unsupported_type():

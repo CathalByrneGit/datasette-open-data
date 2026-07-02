@@ -7,6 +7,7 @@ import yaml
 
 from .providers.base import OpenDataProvider
 from .providers.ckan import CKANProvider
+from .providers.pxstat import PxStatProvider
 from .providers.socrata import SocrataProvider
 
 
@@ -69,6 +70,13 @@ def providers_from_config(config: dict[str, Any]) -> dict[str, OpenDataProvider]
                 name=name,
                 title=item.get("title"),
                 base_url=item["base_url"],
+            )
+        elif provider_type == "pxstat":
+            providers[name] = PxStatProvider(
+                name=name,
+                title=item.get("title"),
+                base_url=item["base_url"],
+                language=item.get("language", "en"),
             )
         else:
             raise ValueError(f"Unsupported provider type: {provider_type!r}")
