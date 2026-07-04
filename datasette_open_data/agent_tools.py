@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from .loader import load_resource, safe_table_name
+from .loader import LoadError, load_resource, safe_table_name
 from .registry import get_provider
 
 
@@ -22,22 +22,36 @@ def register_open_data_agent_tools(datasette):
     return [
         AgentTool(
             name="list_open_data_providers",
-            description="List configured open data providers.",
+            description=(
+                "List the configured open data providers (CKAN, Socrata, PxStat, etc.). "
+                "Call this first to discover available provider names to pass to other tools."
+            ),
             input_schema={"type": "object", "properties": {}},
             fn=_tool_list_open_data_providers,
         ),
         AgentTool(
             name="search_open_data_catalog",
             description=(
-                "Search the local open data catalog for datasets by keyword. "
-                "Use this to find relevant datasets before loading resources."
+                "Search for open data datasets by keyword. "
+                "Uses the local catalog.db FTS index when available (fast), "
+                "otherwise falls back to a live provider API search (slower). "
+                "Returns dataset IDs you can pass to show_open_data_dataset."
             ),
             input_schema={
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string"},
-                    "provider": {"type": "string"},
-                    "limit": {"type": "integer"},
+                    "query": {
+                        "type": "string",
+                        "description": "Keyword(s) to search for, e.g. 'mortgage' or 'consumer price'",
+                    },
+                    "provider": {
+                        "type": "string",
+                        "description": "Provider name from list_open_data_providers. Omit to use the default.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum results to return (1–50, default 10).",
+                    },
                 },
                 "required": ["query"],
             },
@@ -45,12 +59,22 @@ def register_open_data_agent_tools(datasette):
         ),
         AgentTool(
             name="show_open_data_dataset",
-            description="Show metadata and resources for an open data dataset.",
+            description=(
+                "Show metadata and available resources for a dataset. "
+                "Returns the title, description, tags, and a list of resources with their "
+                "load and preview URLs. Use the resource IDs with load_open_data_resource."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
-                    "dataset_id": {"type": "string"},
-                    "provider": {"type": "string"},
+                    "dataset_id": {
+                        "type": "string",
+                        "description": "Dataset ID from search_open_data_catalog results.",
+                    },
+                    "provider": {
+                        "type": "string",
+                        "description": "Provider name. Omit to use the default.",
+                    },
                 },
                 "required": ["dataset_id"],
             },
@@ -59,16 +83,29 @@ def register_open_data_agent_tools(datasette):
         AgentTool(
             name="load_open_data_resource",
             description=(
-                "Load a CKAN resource into the Datasette data database. "
-                "Supports CKAN DataStore resources and CSV resources."
+                "Load an open data resource into the 'data' SQLite database as a table. "
+                "Works with CKAN DataStore resources, CKAN CSV resources, Socrata datasets, "
+                "and PxStat tables. Returns the table name and row count on success."
             ),
             input_schema={
                 "type": "object",
                 "properties": {
-                    "resource_id": {"type": "string"},
-                    "provider": {"type": "string"},
-                    "table": {"type": "string"},
-                    "limit": {"type": "integer"},
+                    "resource_id": {
+                        "type": "string",
+                        "description": "Resource ID from show_open_data_dataset results.",
+                    },
+                    "provider": {
+                        "type": "string",
+                        "description": "Provider name. Omit to use the default.",
+                    },
+                    "table": {
+                        "type": "string",
+                        "description": "Destination table name. Defaults to the resource name.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum rows to load (default 50,000).",
+                    },
                 },
                 "required": ["resource_id"],
             },
@@ -76,17 +113,26 @@ def register_open_data_agent_tools(datasette):
         ),
         AgentTool(
             name="list_loaded_open_data_tables",
-            description="List tables currently loaded in the Datasette data database.",
+            description=(
+                "List tables currently loaded in the 'data' database. "
+                "Use this to see what data is available to query or join."
+            ),
             input_schema={"type": "object", "properties": {}},
             fn=_tool_list_loaded_tables,
         ),
         AgentTool(
             name="describe_loaded_open_data_table",
-            description="Describe columns for a loaded table in the data database.",
+            description=(
+                "Show column names and types for a loaded table. "
+                "Call this before writing SQL queries to understand the schema."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
-                    "table": {"type": "string", "description": "Table name"},
+                    "table": {
+                        "type": "string",
+                        "description": "Table name from list_loaded_open_data_tables.",
+                    },
                 },
                 "required": ["table"],
             },
@@ -94,47 +140,83 @@ def register_open_data_agent_tools(datasette):
         ),
         AgentTool(
             name="sample_loaded_open_data_table",
-            description="Return sample rows from a loaded table in the data database.",
+            description=(
+                "Return sample rows from a loaded table. "
+                "Use this to understand the data before writing SQL queries."
+            ),
             input_schema={
                 "type": "object",
                 "properties": {
-                    "table": {"type": "string"},
-                    "limit": {"type": "integer"},
+                    "table": {
+                        "type": "string",
+                        "description": "Table name from list_loaded_open_data_tables.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of rows to return (1–50, default 10).",
+                    },
                 },
                 "required": ["table"],
             },
             fn=_tool_sample_loaded_table,
         ),
+        AgentTool(
+            name="suggest_open_data_joins",
+            description=(
+                "Suggest how to join the currently loaded tables in the 'data' database. "
+                "Compares column names and samples values using Jaccard similarity to find "
+                "columns that likely refer to the same entities. "
+                "Call this after loading multiple tables to discover join keys."
+            ),
+            input_schema={"type": "object", "properties": {}},
+            fn=_tool_suggest_open_data_joins,
+        ),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 def _fts_query(q: str) -> str:
-    terms = [
-        term.strip()
-        for term in q.replace('"', " ").split()
-        if term.strip()
-    ]
-    return " ".join(f"{term}*" for term in terms)
+    terms = [t.strip() for t in q.replace('"', " ").split() if t.strip()]
+    return " ".join(f"{t}*" for t in terms)
+
+
+def _can_preview(resource) -> bool:
+    """True if the resource supports datastore_preview."""
+    if resource.datastore_active:
+        return True
+    fmt = (resource.format or "").lower()
+    return fmt == "csv" and bool(resource.url)
+
+
+# ---------------------------------------------------------------------------
+# Tool handlers
+# ---------------------------------------------------------------------------
 
 
 async def _tool_list_open_data_providers(datasette, actor):
-    from .registry import plugin_config, providers_from_config
+    try:
+        from .registry import plugin_config, providers_from_config
 
-    providers = providers_from_config(plugin_config(datasette))
-
-    return json.dumps(
-        {
-            "providers": [
-                {
-                    "name": name,
-                    "title": provider.title,
-                    "type": provider.type,
-                    "base_url": provider.base_url,
-                }
-                for name, provider in providers.items()
-            ]
-        }
-    )
+        providers = providers_from_config(plugin_config(datasette))
+        return json.dumps(
+            {
+                "providers": [
+                    {
+                        "name": name,
+                        "title": provider.title,
+                        "type": provider.type,
+                        "base_url": provider.base_url,
+                    }
+                    for name, provider in providers.items()
+                ]
+            }
+        )
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
 
 
 async def _tool_search_open_data_catalog(
@@ -145,72 +227,101 @@ async def _tool_search_open_data_catalog(
     limit: int = 10,
 ):
     limit = min(max(int(limit or 10), 1), 50)
-    provider_obj = get_provider(datasette, provider)
 
-    if "catalog" not in datasette.databases:
+    try:
+        provider_obj = get_provider(datasette, provider)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+    # Fast path: FTS search via catalog.db
+    if "catalog" in datasette.databases:
+        try:
+            db = datasette.get_database("catalog")
+            rows = await db.execute(
+                """
+                SELECT
+                    p.provider,
+                    p.id,
+                    p.name,
+                    p.title,
+                    p.notes,
+                    p.organization_title,
+                    COUNT(DISTINCT r.id) AS resource_count
+                FROM packages_fts fts
+                JOIN packages_fts_map m
+                  ON m.fts_rowid = fts.rowid
+                JOIN packages p
+                  ON p.provider = m.provider
+                 AND p.id = m.package_id
+                LEFT JOIN resources r
+                  ON r.provider = p.provider
+                 AND r.package_id = p.id
+                WHERE packages_fts MATCH :query
+                  AND p.provider = :provider
+                GROUP BY p.provider, p.id
+                ORDER BY rank
+                LIMIT :limit
+                """,
+                {
+                    "query": _fts_query(query),
+                    "provider": provider_obj.name,
+                    "limit": limit,
+                },
+            )
+
+            results = [
+                {
+                    "provider": row["provider"],
+                    "dataset_id": row["id"],
+                    "title": row["title"] or row["name"] or row["id"],
+                    "notes": row["notes"],
+                    "organization": row["organization_title"],
+                    "resource_count": row["resource_count"],
+                    "url": f"/-/open-data/dataset/{row['id']}?provider={row['provider']}",
+                }
+                for row in rows.rows
+            ]
+
+            return json.dumps(
+                {
+                    "query": query,
+                    "provider": provider_obj.name,
+                    "source": "catalog",
+                    "count": len(results),
+                    "results": results,
+                    "_html": _search_results_html(results),
+                }
+            )
+        except Exception:
+            pass  # fall through to live search
+
+    # Slow path: live provider search
+    try:
+        live_results = await provider_obj.search(query, rows=limit)
+        results = [
+            {
+                "provider": provider_obj.name,
+                "dataset_id": r.id,
+                "title": r.title,
+                "notes": r.notes,
+                "organization": r.organization,
+                "resource_count": len(r.resources),
+                "url": f"/-/open-data/dataset/{r.id}?provider={provider_obj.name}",
+            }
+            for r in live_results
+        ]
         return json.dumps(
             {
-                "error": "catalog.db is not loaded.",
-                "hint": "Run: uv run datasette data.db catalog.db -m examples/metadata.yml",
+                "query": query,
+                "provider": provider_obj.name,
+                "source": "live",
+                "count": len(results),
+                "results": results,
+                "_html": _search_results_html(results),
             }
         )
-
-    db = datasette.get_database("catalog")
-
-    rows = await db.execute(
-        """
-        SELECT
-            p.provider,
-            p.id,
-            p.name,
-            p.title,
-            p.notes,
-            p.organization_title,
-            COUNT(DISTINCT r.id) AS resource_count
-        FROM packages_fts fts
-        JOIN packages_fts_map m
-          ON m.fts_rowid = fts.rowid
-        JOIN packages p
-          ON p.provider = m.provider
-         AND p.id = m.package_id
-        LEFT JOIN resources r
-          ON r.provider = p.provider
-         AND r.package_id = p.id
-        WHERE packages_fts MATCH :query
-          AND p.provider = :provider
-        GROUP BY p.provider, p.id
-        ORDER BY rank
-        LIMIT :limit
-        """,
-        {
-            "query": _fts_query(query),
-            "provider": provider_obj.name,
-            "limit": limit,
-        },
-    )
-
-    results = [
-        {
-            "provider": row["provider"],
-            "dataset_id": row["id"],
-            "title": row["title"] or row["name"] or row["id"],
-            "notes": row["notes"],
-            "organization": row["organization_title"],
-            "resource_count": row["resource_count"],
-            "url": f"/-/open-data/dataset/{row['id']}?provider={row['provider']}",
-        }
-        for row in rows.rows
-    ]
-
-    return json.dumps(
-        {
-            "query": query,
-            "provider": provider_obj.name,
-            "count": len(results),
-            "results": results,
-            "_html": _search_results_html(results),
-        }
-    )
+    except Exception as exc:
+        return json.dumps({"error": f"Search failed: {exc}"})
 
 
 async def _tool_show_open_data_dataset(
@@ -219,8 +330,11 @@ async def _tool_show_open_data_dataset(
     dataset_id: str,
     provider: str | None = None,
 ):
-    provider_obj = get_provider(datasette, provider)
-    dataset = await provider_obj.dataset(dataset_id)
+    try:
+        provider_obj = get_provider(datasette, provider)
+        dataset = await provider_obj.dataset(dataset_id)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
 
     resources = [
         {
@@ -231,10 +345,12 @@ async def _tool_show_open_data_dataset(
             "url": resource.url,
             "preview_url": (
                 f"/-/open-data/resource/{resource.id}/preview?provider={provider_obj.name}"
-                if resource.datastore_active
+                if _can_preview(resource)
                 else None
             ),
-            "load_url": f"/-/open-data/resource/{resource.id}/load?provider={provider_obj.name}",
+            "load_url": (
+                f"/-/open-data/resource/{resource.id}/load?provider={provider_obj.name}"
+            ),
         }
         for resource in dataset.resources
     ]
@@ -261,35 +377,46 @@ async def _tool_load_open_data_resource(
     table: str | None = None,
     limit: int = 50_000,
 ):
-    provider_obj = get_provider(datasette, provider)
-    resource = await provider_obj.resource(resource_id)
+    try:
+        provider_obj = get_provider(datasette, provider)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
 
     if "data" not in datasette.databases:
         return json.dumps(
             {
                 "error": "No database named 'data' is loaded.",
-                "hint": "Run: uv run datasette data.db catalog.db -m examples/metadata.yml",
+                "hint": "Start Datasette with data.db: datasette serve data.db catalog.db -m metadata.yml",
             }
         )
 
     db_path = datasette.databases["data"].path
-
     if db_path is None:
         return json.dumps(
             {
-                "error": "The 'data' database is not file-backed. Resource loading does not work with --memory.",
+                "error": "The 'data' database is not file-backed. Resource loading requires a file database.",
             }
         )
 
+    try:
+        resource = await provider_obj.resource(resource_id)
+    except Exception as exc:
+        return json.dumps({"error": f"Could not fetch resource metadata: {exc}"})
+
     table_name = safe_table_name(table or resource.name or resource.id)
 
-    rows_loaded = await load_resource(
-        provider=provider_obj,
-        resource=resource,
-        db_path=db_path,
-        table=table_name,
-        limit=int(limit or 50_000),
-    )
+    try:
+        rows_loaded = await load_resource(
+            provider=provider_obj,
+            resource=resource,
+            db_path=db_path,
+            table=table_name,
+            limit=int(limit or 50_000),
+        )
+    except LoadError as exc:
+        return json.dumps({"error": str(exc)})
+    except Exception as exc:
+        return json.dumps({"error": f"Load failed: {exc}"})
 
     return json.dumps(
         {
@@ -312,42 +439,31 @@ async def _tool_list_loaded_tables(datasette, actor):
     if "data" not in datasette.databases:
         return json.dumps({"error": "No database named 'data' is loaded."})
 
-    db = datasette.get_database("data")
-    tables = [
-        table
-        for table in await db.table_names()
-        if not table.startswith("_")
-    ]
-
-    return json.dumps({"database": "data", "tables": tables})
+    try:
+        db = datasette.get_database("data")
+        tables = [t for t in await db.table_names() if not t.startswith("_")]
+        return json.dumps({"database": "data", "tables": tables})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
 
 
 async def _tool_describe_loaded_table(datasette, actor, table: str):
     if "data" not in datasette.databases:
         return json.dumps({"error": "No database named 'data' is loaded."})
 
-    db = datasette.get_database("data")
-
     try:
+        db = datasette.get_database("data")
         rows = await db.execute(f'PRAGMA table_info("{table}")')
+        columns = [
+            {
+                "name": row["name"] if "name" in row.keys() else row[1],
+                "type": row["type"] if "type" in row.keys() else row[2],
+            }
+            for row in rows.rows
+        ]
+        return json.dumps({"database": "data", "table": table, "columns": columns})
     except Exception as exc:
         return json.dumps({"error": str(exc)})
-
-    columns = [
-        {
-            "name": row["name"] if "name" in row.keys() else row[1],
-            "type": row["type"] if "type" in row.keys() else row[2],
-        }
-        for row in rows.rows
-    ]
-
-    return json.dumps(
-        {
-            "database": "data",
-            "table": table,
-            "columns": columns,
-        }
-    )
 
 
 async def _tool_sample_loaded_table(
@@ -360,74 +476,139 @@ async def _tool_sample_loaded_table(
         return json.dumps({"error": "No database named 'data' is loaded."})
 
     limit = min(max(int(limit or 10), 1), 50)
-    db = datasette.get_database("data")
 
     try:
-        result = await db.execute(
-            f'SELECT * FROM "{table}" LIMIT ?',
-            [limit],
-        )
+        db = datasette.get_database("data")
+        result = await db.execute(f'SELECT * FROM "{table}" LIMIT ?', [limit])
+        rows = [dict(row) for row in result.rows]
+        return json.dumps({"database": "data", "table": table, "count": len(rows), "rows": rows})
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
-    rows = [dict(row) for row in result.rows]
+
+async def _tool_suggest_open_data_joins(datasette, actor):
+    if "data" not in datasette.databases:
+        return json.dumps({"error": "No database named 'data' is loaded."})
+
+    try:
+        db = datasette.get_database("data")
+        tables = [t for t in await db.table_names() if not t.startswith("_")]
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+    if len(tables) < 2:
+        return json.dumps(
+            {
+                "message": "Need at least 2 loaded tables to suggest joins.",
+                "tables": tables,
+            }
+        )
+
+    # Sample values per column for each table
+    table_cols: dict[str, dict[str, set[str]]] = {}
+    for table in tables:
+        try:
+            col_rows = await db.execute(f'PRAGMA table_info("{table}")')
+            columns = [
+                (row["name"] if "name" in row.keys() else row[1])
+                for row in col_rows.rows
+            ]
+            sample = await db.execute(f'SELECT * FROM "{table}" LIMIT 200')
+            rows = [dict(r) for r in sample.rows]
+
+            table_cols[table] = {
+                col: {str(r[col]) for r in rows if r.get(col) is not None}
+                for col in columns
+            }
+        except Exception:
+            continue
+
+    suggestions = []
+    table_list = list(table_cols.keys())
+
+    for i in range(len(table_list)):
+        for j in range(i + 1, len(table_list)):
+            t1, t2 = table_list[i], table_list[j]
+            for col1, vals1 in table_cols[t1].items():
+                for col2, vals2 in table_cols[t2].items():
+                    name_match = col1.lower() == col2.lower()
+                    name_similar = (
+                        not name_match
+                        and (col1.lower() in col2.lower() or col2.lower() in col1.lower())
+                    )
+
+                    if not (name_match or name_similar):
+                        continue
+
+                    jaccard = 0.0
+                    if vals1 and vals2:
+                        union = vals1 | vals2
+                        jaccard = len(vals1 & vals2) / len(union) if union else 0.0
+
+                    if name_match or jaccard > 0.05:
+                        suggestions.append(
+                            {
+                                "table1": t1,
+                                "column1": col1,
+                                "table2": t2,
+                                "column2": col2,
+                                "name_match": name_match,
+                                "jaccard": round(jaccard, 3),
+                                "sql": (
+                                    f'SELECT * FROM "{t1}" '
+                                    f'JOIN "{t2}" ON "{t1}"."{col1}" = "{t2}"."{col2}" '
+                                    f"LIMIT 10"
+                                ),
+                            }
+                        )
+
+    suggestions.sort(key=lambda x: (x["name_match"], x["jaccard"]), reverse=True)
 
     return json.dumps(
         {
-            "database": "data",
-            "table": table,
-            "count": len(rows),
-            "rows": rows,
+            "tables": table_list,
+            "count": len(suggestions),
+            "suggestions": suggestions[:10],
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# HTML helpers for _html fields
+# ---------------------------------------------------------------------------
 
 
 def _search_results_html(results: list[dict]) -> str:
     if not results:
         return "<p>No datasets found.</p>"
 
-    items = []
-
-    for result in results:
-        items.append(
-            f"""
-            <li>
-              <strong><a href="{result["url"]}">{result["title"]}</a></strong>
-              <br>
-              <small>{result["provider"]} · {result["resource_count"]} resources</small>
-            </li>
-            """
-        )
-
+    items = [
+        f"""<li>
+          <strong><a href="{r["url"]}">{r["title"]}</a></strong><br>
+          <small>{r["provider"]} &middot; {r["resource_count"]} resources</small>
+        </li>"""
+        for r in results
+    ]
     return "<ul>" + "\n".join(items) + "</ul>"
 
 
 def _dataset_html(provider: str, dataset, resources: list[dict]) -> str:
     items = []
-
     for resource in resources:
         actions = [f'<a href="{resource["load_url"]}">Load</a>']
-
         if resource["preview_url"]:
             actions.insert(0, f'<a href="{resource["preview_url"]}">Preview</a>')
-
         items.append(
-            f"""
-            <li>
-              <strong>{resource["name"] or resource["id"]}</strong>
-              <br>
-              <small>{resource["format"] or "unknown format"}</small>
-              <br>
-              {" · ".join(actions)}
-            </li>
-            """
+            f"""<li>
+              <strong>{resource["name"] or resource["id"]}</strong><br>
+              <small>{resource["format"] or "unknown format"}</small><br>
+              {" &middot; ".join(actions)}
+            </li>"""
         )
 
-    return f"""
-    <h3>{dataset.title}</h3>
-    <p>{dataset.notes or ""}</p>
-    <p><small>{provider}</small></p>
-    <ul>
-      {"".join(items)}
-    </ul>
-    """
+    return (
+        f"<h3>{dataset.title}</h3>"
+        f"<p>{dataset.notes or ''}</p>"
+        f"<p><small>{provider}</small></p>"
+        f"<ul>{''.join(items)}</ul>"
+    )

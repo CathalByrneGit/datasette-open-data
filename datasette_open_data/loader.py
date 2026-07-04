@@ -9,7 +9,10 @@ import httpx
 from sqlite_utils import Database
 
 from .models import Resource
-from .providers.ckan import CKANProvider
+
+
+class LoadError(RuntimeError):
+    """Raised when a resource load fails, including partial-load context."""
 
 
 def safe_table_name(value: str) -> str:
@@ -35,7 +38,7 @@ def _insert_rows(
 
 
 async def load_datastore_resource(
-    provider: CKANProvider,
+    provider: Any,
     resource_id: str,
     db_path: str,
     table: str | None = None,
@@ -53,15 +56,21 @@ async def load_datastore_resource(
         remaining = limit - total
         page_size = min(batch_size, remaining)
 
-        result = await provider._get(
-            "datastore_search",
-            {
-                "resource_id": resource_id,
-                "limit": page_size,
-                "offset": offset,
-            },
-            datastore=True,
-        )
+        try:
+            result = await provider._get(
+                "datastore_search",
+                {
+                    "resource_id": resource_id,
+                    "limit": page_size,
+                    "offset": offset,
+                },
+                datastore=True,
+            )
+        except Exception as exc:
+            raise LoadError(
+                f"Failed fetching resource {resource_id!r} at offset {offset} "
+                f"({total} rows already written): {exc}"
+            ) from exc
 
         records = result.get("records") or []
 
@@ -86,18 +95,27 @@ async def load_csv_url(
     table: str,
     encoding: str = "utf-8-sig",
 ) -> int:
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-        response = await client.get(csv_url)
-        response.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            response = await client.get(csv_url)
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise LoadError(
+            f"HTTP {exc.response.status_code} downloading CSV from {csv_url!r}"
+        ) from exc
+    except httpx.TimeoutException as exc:
+        raise LoadError(f"Timed out downloading CSV from {csv_url!r}") from exc
 
-    text = response.content.decode(encoding, errors="replace")
-    reader = csv.DictReader(io.StringIO(text))
-
-    return _insert_rows(db_path, safe_table_name(table), reader)
+    try:
+        text = response.content.decode(encoding, errors="replace")
+        reader = csv.DictReader(io.StringIO(text))
+        return _insert_rows(db_path, safe_table_name(table), reader)
+    except csv.Error as exc:
+        raise LoadError(f"CSV parse error from {csv_url!r}: {exc}") from exc
 
 
 async def load_resource(
-    provider: CKANProvider,
+    provider: Any,
     resource: Resource,
     db_path: str,
     table: str | None = None,
@@ -116,7 +134,11 @@ async def load_resource(
 
     resource_format = (resource.format or "").lower()
 
-    if resource_format == "csv" and resource.url:
+    if resource_format == "csv":
+        if not resource.url:
+            raise LoadError(
+                f"Resource {resource.id!r} has format=CSV but no URL to download from"
+            )
         return await load_csv_url(
             csv_url=resource.url,
             db_path=db_path,

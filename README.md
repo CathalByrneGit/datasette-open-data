@@ -4,23 +4,19 @@ A provider-based Datasette plugin for discovering, cataloging, searching and loa
 
 `datasette-open-data` combines:
 
-* Live provider APIs (currently CKAN)
+* Live provider APIs (CKAN, Socrata, PxStat)
 * A local SQLite metadata catalog
 * Datasette browsing and search
 * Resource loading into SQLite
 * Agent tooling for dataset discovery and analysis
 
-The project currently supports CKAN portals including:
+Supported portals out of the box:
 
-* Central Bank of Ireland Open Data Portal
-* data.gov.ie
+* **Central Bank of Ireland** — CKAN
+* **data.gov.ie** — CKAN
+* **CSO Ireland** — PxStat
 
-with future support planned for:
-
-* PxWeb / PxStat
-* Socrata
-* ArcGIS Hub
-* Other open-data ecosystems
+Any CKAN, Socrata, or PxStat portal can be added with two lines in `providers.yml`.
 
 ---
 
@@ -60,8 +56,8 @@ Contains:
 * Datasets
 * Resources
 * Organizations
-* Groups
-* Tags
+* Groups / Themes
+* Tags / Subjects
 * FTS search index
 
 Purpose:
@@ -92,12 +88,12 @@ Agent workflows
 
 ### Catalog
 
-* Multi-provider support
+* Multi-provider support (CKAN, Socrata, PxStat)
 * Local metadata warehouse
 * Full-text search (FTS5)
 * Browse by organization
-* Browse by group
-* Browse by tag
+* Browse by group / theme
+* Browse by tag / subject
 * Recently updated datasets
 
 ### CKAN
@@ -109,13 +105,32 @@ Agent workflows
 * Tags
 * DataStore preview
 
+### Socrata
+
+* Catalog search via Discovery API
+* Dataset metadata via Views API
+* SODA data preview
+* Category and tag browsing
+* CSV export for loading
+
+### PxStat
+
+* Table catalog (`ReadCollection`)
+* Dataset metadata (`ReadMetadata`)
+* Theme and subject navigation
+* CSV data preview and loading
+* Language-configurable (default: English)
+
 ### Resource Loading
 
-* CKAN DataStore resources
-* CSV resources
+* CKAN DataStore resources (paginated)
+* CSV resources (via HTTP download)
+* Socrata SODA CSV exports
+* PxStat CSV exports
 * Automatic format detection
 * Automatic schema creation
 * Incremental column discovery
+* `LoadError` for clean error reporting
 
 ### Datasette
 
@@ -154,15 +169,9 @@ uv pip install -e .
 
 ## Configuration
 
-### providers.yml
+Provider definitions live in `providers.yml`. Three provider types are supported.
 
-Provider definitions live in:
-
-```text
-providers.yml
-```
-
-Example:
+### CKAN
 
 ```yaml
 providers:
@@ -180,34 +189,47 @@ providers:
     api_base_url: https://data.gov.ie/api/3
 ```
 
+`api_base_url` and `datastore_api_base_url` are optional; they default to `{base_url}/api/3`.
+
+### PxStat
+
+```yaml
+providers:
+  cso:
+    type: pxstat
+    title: Central Statistics Office Ireland
+    base_url: https://ws.cso.ie
+    language: en   # optional, defaults to en
+```
+
+Derives `{base_url}/public/api.jsonrpc` for metadata and `{base_url}/public/api.restful` for CSV downloads automatically.
+
+**Note:** PxStat `search()` fetches the full table catalog live (~12,600 tables for CSO) and filters in-memory. Run `scripts/build_catalog.py` to populate `catalog.db` for fast FTS search.
+
+### Socrata
+
+```yaml
+providers:
+  nycopendata:
+    type: socrata
+    title: NYC Open Data
+    base_url: https://data.cityofnewyork.us
+```
+
+Uses the Socrata Discovery API for search and SODA for data preview and CSV export.
+
 ---
 
 ## Building the Catalog
 
-Generate catalog metadata:
-
-```bash
-uv run python scripts/build_catalog.py --provider centralbank
-```
-
-Add data.gov.ie:
-
-```bash
-uv run python scripts/build_catalog.py --provider datagovie --limit 500
-```
-
-Build both:
+Generate catalog metadata for CKAN providers:
 
 ```bash
 uv run python scripts/build_catalog.py --provider centralbank
 uv run python scripts/build_catalog.py --provider datagovie --limit 500
 ```
 
-This creates:
-
-```text
-catalog.db
-```
+This creates `catalog.db` and enables fast FTS search. Without it, search falls back to live provider APIs.
 
 ---
 
@@ -219,17 +241,11 @@ Create an empty database for imported datasets:
 uv run python scripts/create_db.py
 ```
 
-This creates:
-
-```text
-data.db
-```
+This creates `data.db`.
 
 ---
 
 ## Running Datasette
-
-Start Datasette with both databases:
 
 ```bash
 uv run datasette serve data.db catalog.db \
@@ -250,51 +266,22 @@ http://127.0.0.1:8001/-/open-data
 
 ## Available Routes
 
-### Homepage
-
-```text
-/-/open-data
-```
-
-Open Data explorer.
-
-### Search
-
-```text
-/-/open-data/search?q=mortgage
-```
-
-Search datasets.
-
-### Dataset
-
-```text
-/-/open-data/dataset/{dataset_id}
-```
-
-View dataset metadata and resources.
-
-### Resource Preview
-
-```text
-/-/open-data/resource/{resource_id}/preview
-```
-
-Preview DataStore records.
-
-### Resource Load
-
-```text
-/-/open-data/resource/{resource_id}/load
-```
-
-Load a resource into `data.db`.
+| Route | Description |
+|-------|-------------|
+| `/-/open-data` | Open Data explorer homepage |
+| `/-/open-data/search?q=mortgage` | Search datasets |
+| `/-/open-data/dataset/{id}` | Dataset metadata and resources |
+| `/-/open-data/resource/{id}/preview` | Preview resource records |
+| `/-/open-data/resource/{id}/load` | Load resource into `data.db` |
+| `/-/open-data/groups` | Browse groups / themes |
+| `/-/open-data/organizations` | Browse organizations |
+| `/-/open-data/tags` | Browse tags / subjects |
 
 ---
 
 ## CLI Loading
 
-Load a CKAN resource:
+Load a resource by provider:
 
 ```bash
 open-data-load \
@@ -304,7 +291,7 @@ open-data-load \
   --table my_table
 ```
 
-Load a CSV:
+Load a CSV directly:
 
 ```bash
 open-data-load \
@@ -327,20 +314,6 @@ The plugin exposes agent tools for:
 * Describing tables
 * Sampling rows
 
-This enables workflows such as:
-
-```text
-Find mortgage datasets
-        ↓
-Inspect metadata
-        ↓
-Load dataset
-        ↓
-Query data
-        ↓
-Analyze results
-```
-
 ---
 
 ## Project Structure
@@ -348,32 +321,65 @@ Analyze results
 ```text
 datasette-open-data/
 ├── datasette_open_data/
+│   ├── __init__.py          # Datasette hooks and route registration
+│   ├── models.py            # Resource, DatasetSummary, Dataset dataclasses
+│   ├── registry.py          # Provider instantiation from config
+│   ├── loader.py            # DataStore and CSV loading (LoadError)
+│   ├── views.py             # Route handlers
+│   ├── agent_tools.py       # LLM agent tool definitions
+│   ├── cli.py               # CLI entry point
+│   └── providers/
+│       ├── base.py          # OpenDataProvider protocol
+│       ├── ckan.py          # CKAN provider
+│       ├── socrata.py       # Socrata / SODA provider
+│       └── pxstat.py        # PxStat provider (CSO Ireland)
+├── scripts/
+│   ├── build_catalog.py     # Populate catalog.db from provider APIs
+│   └── create_db.py         # Create empty data.db
+├── tests/
+│   ├── test_ckan_provider.py
+│   ├── test_socrata_provider.py
+│   ├── test_pxstat_provider.py
+│   ├── test_loader.py
+│   ├── test_registry.py
+│   └── test_views.py
+├── .github/
+│   └── workflows/
+│       └── ci.yml           # CI: Python 3.10 / 3.11 / 3.12
 ├── templates/
 ├── static/
-├── scripts/
-│   ├── build_catalog.py
-│   └── create_db.py
 ├── providers.yml
-├── datasette.yml
-├── catalog.db
-└── data.db
+└── metadata.yml
 ```
 
 ---
 
-## Current Providers
+## Testing
+
+```bash
+uv sync --group dev
+uv run pytest tests/ -v
+```
+
+CI runs on every push and pull request across Python 3.10, 3.11, and 3.12.
+
+---
+
+## Providers
 
 ### Implemented
 
-* CKAN
+| Type | Example portals |
+|------|----------------|
+| `ckan` | Central Bank of Ireland, data.gov.ie, any CKAN portal |
+| `socrata` | NYC Open Data, Chicago Data Portal, any Socrata portal |
+| `pxstat` | CSO Ireland, any PxStat-compatible portal |
 
 ### Planned
 
-* PxWeb / PxStat
-* Socrata
+* PxWeb (Statistics Sweden, Statistics Finland, Statistics Norway — different API to PxStat)
 * ArcGIS Hub
-* OpenSpending
-* Generic JSON APIs
+* Generic DCAT/JSON-LD catalogs
 
 ---
 
@@ -381,20 +387,19 @@ datasette-open-data/
 
 ### Near Term
 
-* Better catalog search
+* Extend `build_catalog.py` to support PxStat (fast catalog search for CSO)
 * Richer resource previews
-* Agent integration
-* Catalog refresh tooling
+* Agent tool quality improvements
 
 ### Future
 
+* PxWeb provider (Nordic statistical offices)
 * XLSX loading
-* JSON-STAT loading
+* JSON-stat loading
 * Geospatial normalization
 * Background imports
 * Scheduled catalog refresh
 * Hybrid semantic search
-* Provider-specific plugins
 
 ---
 
