@@ -4,8 +4,7 @@ from dataclasses import asdict, is_dataclass
 
 from datasette import Response
 
-from .loader import load_resource, safe_table_name
-
+from .loader import LoadError, load_resource, safe_table_name
 from .registry import get_provider, plugin_config, providers_from_config
 
 
@@ -14,6 +13,13 @@ def _wants_json(request) -> bool:
         request.args.get("_format") == "json"
         or "application/json" in request.headers.get("accept", "")
     )
+
+
+def _error_response(request, message: str, status: int = 502):
+    """Render an upstream/config failure as JSON or plain text, never a 500."""
+    if _wants_json(request):
+        return Response.json({"ok": False, "error": message}, status=status)
+    return Response.text(message, status=status)
 
 
 def _jsonable(value):
@@ -45,7 +51,10 @@ def _fts_query(q: str) -> str:
 
 
 async def index_view(datasette, request):
-    providers = providers_from_config(plugin_config(datasette))
+    try:
+        providers = providers_from_config(plugin_config(datasette))
+    except (KeyError, ValueError) as exc:
+        return _error_response(request, f"Invalid provider configuration: {exc}", status=500)
 
     selected_provider = (
         request.args.get("provider")
@@ -201,7 +210,11 @@ async def index_view(datasette, request):
 async def search_view(datasette, request):
     q = request.args.get("q", "").strip()
     provider_name = request.args.get("provider")
-    provider = get_provider(datasette, provider_name)
+
+    try:
+        provider = get_provider(datasette, provider_name)
+    except (KeyError, ValueError) as exc:
+        return _error_response(request, str(exc), status=404)
 
     tag = request.args.get("tag")
     organization_id = request.args.get("organization_id")
@@ -355,7 +368,12 @@ async def search_view(datasette, request):
             search_source = "live-fallback"
 
     if q and search_source != "catalog":
-        live_results = await provider.search(q, rows=rows_limit)
+        try:
+            live_results = await provider.search(q, rows=rows_limit)
+        except Exception as exc:
+            return _error_response(
+                request, f"Search failed against provider {provider.name!r}: {exc}"
+            )
 
         results = [
             {
@@ -404,7 +422,11 @@ async def search_view(datasette, request):
 
 
 async def dataset_view(datasette, request):
-    provider = get_provider(datasette, request.args.get("provider"))
+    try:
+        provider = get_provider(datasette, request.args.get("provider"))
+    except (KeyError, ValueError) as exc:
+        return _error_response(request, str(exc), status=404)
+
     dataset_id = request.url_vars["dataset_id"]
 
     dataset = None
@@ -497,7 +519,14 @@ async def dataset_view(datasette, request):
             dataset_source = "live-fallback"
 
     if dataset is None:
-        dataset = await provider.dataset(dataset_id)
+        try:
+            dataset = await provider.dataset(dataset_id)
+        except Exception as exc:
+            return _error_response(
+                request,
+                f"Could not load dataset {dataset_id!r} from provider "
+                f"{provider.name!r}: {exc}",
+            )
 
     if _wants_json(request):
         return Response.json(
@@ -520,11 +549,26 @@ async def dataset_view(datasette, request):
     return Response.html(html)
 
 async def resource_preview_view(datasette, request):
-    provider = get_provider(datasette, request.args.get("provider"))
-    resource_id = request.url_vars["resource_id"]
-    limit = int(request.args.get("limit", 10))
+    try:
+        provider = get_provider(datasette, request.args.get("provider"))
+    except (KeyError, ValueError) as exc:
+        return _error_response(request, str(exc), status=404)
 
-    result = await provider.datastore_preview(resource_id, limit=limit)
+    resource_id = request.url_vars["resource_id"]
+
+    try:
+        limit = int(request.args.get("limit", 10))
+    except ValueError:
+        return _error_response(request, "limit must be an integer", status=400)
+
+    try:
+        result = await provider.datastore_preview(resource_id, limit=limit)
+    except Exception as exc:
+        return _error_response(
+            request,
+            f"Could not preview resource {resource_id!r} from provider "
+            f"{provider.name!r}: {exc}",
+        )
 
     if _wants_json(request):
         return Response.json(result)
@@ -542,25 +586,73 @@ async def resource_preview_view(datasette, request):
     return Response.html(html)
 
 
+async def _provider_listing_view(datasette, request, method_name: str):
+    """Shared body for the groups / organizations / tags endpoints."""
+    try:
+        provider = get_provider(datasette, request.args.get("provider"))
+    except (KeyError, ValueError) as exc:
+        return _error_response(request, str(exc), status=404)
+
+    try:
+        return Response.json(await getattr(provider, method_name)())
+    except Exception as exc:
+        return _error_response(
+            request,
+            f"Could not fetch {method_name} from provider {provider.name!r}: {exc}",
+        )
+
+
 async def groups_view(datasette, request):
-    provider = get_provider(datasette, request.args.get("provider"))
-    return Response.json(await provider.groups())
+    return await _provider_listing_view(datasette, request, "groups")
 
 
 async def organizations_view(datasette, request):
-    provider = get_provider(datasette, request.args.get("provider"))
-    return Response.json(await provider.organizations())
+    return await _provider_listing_view(datasette, request, "organizations")
 
 
 async def tags_view(datasette, request):
-    provider = get_provider(datasette, request.args.get("provider"))
-    return Response.json(await provider.tags())
+    return await _provider_listing_view(datasette, request, "tags")
+
 
 async def load_resource_view(datasette, request):
-    provider = get_provider(datasette, request.args.get("provider"))
+    try:
+        provider = get_provider(datasette, request.args.get("provider"))
+    except (KeyError, ValueError) as exc:
+        return _error_response(request, str(exc), status=404)
+
     resource_id = request.url_vars["resource_id"]
 
-    resource = await provider.resource(resource_id)
+    if "data" not in datasette.databases:
+        return _error_response(
+            request,
+            "Cannot load resource: no database named 'data' is attached. "
+            "Start Datasette with data.db, e.g. "
+            "datasette serve data.db catalog.db -m metadata.yml",
+            status=400,
+        )
+
+    db_path = datasette.databases["data"].path
+
+    if db_path is None:
+        return _error_response(
+            request,
+            "Cannot load resource: the 'data' database is not backed by a file.",
+            status=400,
+        )
+
+    try:
+        limit = int(request.args.get("limit", 50_000))
+    except ValueError:
+        return _error_response(request, "limit must be an integer", status=400)
+
+    try:
+        resource = await provider.resource(resource_id)
+    except Exception as exc:
+        return _error_response(
+            request,
+            f"Could not fetch resource {resource_id!r} from provider "
+            f"{provider.name!r}: {exc}",
+        )
 
     table = safe_table_name(
         request.args.get("table")
@@ -568,23 +660,18 @@ async def load_resource_view(datasette, request):
         or resource.id
     )
 
-    db_path = datasette.databases["data"].path
-
-    if db_path is None:
-        return Response.text(
-            "Cannot load resource: the 'data' database is not backed by a file.",
-            status=400,
+    try:
+        rows_loaded = await load_resource(
+            provider=provider,
+            resource=resource,
+            db_path=db_path,
+            table=table,
+            limit=limit,
         )
-
-    limit = int(request.args.get("limit", 50_000))
-
-    rows_loaded = await load_resource(
-        provider=provider,
-        resource=resource,
-        db_path=db_path,
-        table=table,
-        limit=limit,
-    )
+    except LoadError as exc:
+        return _error_response(request, str(exc))
+    except Exception as exc:
+        return _error_response(request, f"Load failed: {exc}")
 
     if _wants_json(request):
         return Response.json(

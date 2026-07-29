@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -155,7 +156,51 @@ class CKANProvider:
             },
             datastore=True,
         )
-    
+
     async def resource(self, resource_id: str) -> Resource:
         result = await self._get("resource_show", {"id": resource_id})
         return self._resource_from_ckan(result)
+
+    async def iter_catalog(
+        self,
+        limit: int | None = None,
+        rows_per_page: int = 100,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Page through package_search, yielding the full package_show record.
+
+        package_search alone omits resources on some CKAN deployments, so each
+        package is re-fetched with package_show.
+        """
+        start = 0
+        yielded = 0
+
+        while True:
+            result = await self._get(
+                "package_search",
+                {"q": "*:*", "rows": rows_per_page, "start": start},
+            )
+
+            results = result.get("results") or []
+            if not results:
+                return
+
+            for package in results:
+                if limit is not None and yielded >= limit:
+                    return
+
+                package_id = package.get("id")
+                if not package_id:
+                    continue
+
+                try:
+                    yield await self._get("package_show", {"id": package_id})
+                except (CKANError, httpx.HTTPError):
+                    # A single unreadable package shouldn't abort the crawl.
+                    continue
+
+                yielded += 1
+
+            start += rows_per_page
+
+            if start >= result.get("count", 0):
+                return

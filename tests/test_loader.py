@@ -17,7 +17,6 @@ from datasette_open_data.loader import (
 from datasette_open_data.models import Resource
 from datasette_open_data.providers.ckan import CKANProvider
 
-
 # ---------------------------------------------------------------------------
 # safe_table_name
 # ---------------------------------------------------------------------------
@@ -55,13 +54,18 @@ def test_insert_rows_returns_count(tmp_path):
     assert list(db["scores"].rows) == rows
 
 
-def test_insert_rows_empty_creates_table(tmp_path):
+def test_insert_rows_empty_creates_no_table(tmp_path):
+    """An empty result must not leave a placeholder table behind.
+
+    A stub table would surface in list_loaded_open_data_tables and in join
+    suggestions as though it held data.
+    """
     db_path = str(tmp_path / "test.db")
     count = _insert_rows(db_path, "empty_table", [])
     assert count == 0
 
     db = Database(db_path)
-    assert "empty_table" in db.table_names()
+    assert "empty_table" not in db.table_names()
 
 
 def test_insert_rows_accumulates_without_pk(tmp_path):
@@ -276,5 +280,7 @@ async def test_load_resource_unsupported_raises(tmp_path):
     provider = CKANProvider(name="test", base_url="http://example.com")
     resource = Resource(id="res-4", name="weird", format="XLS")
 
-    with pytest.raises(ValueError, match="unsupported format"):
+    # LoadError, not a bare ValueError, so callers can catch every load
+    # failure with a single except clause.
+    with pytest.raises(LoadError, match="unsupported format"):
         await load_resource(provider, resource, db_path)

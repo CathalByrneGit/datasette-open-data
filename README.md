@@ -131,6 +131,7 @@ Agent workflows
 * Automatic schema creation
 * Incremental column discovery
 * `LoadError` for clean error reporting
+* Writes run off the event loop, so large loads don't block the server
 
 ### Datasette
 
@@ -143,11 +144,12 @@ Agent workflows
 
 ### Agents
 
-* Search catalog
+* Search catalog (falls back to live provider search when `catalog.db` is absent)
 * Inspect datasets
 * Load resources
 * Inspect loaded tables
 * Sample data
+* Suggest joins between loaded tables
 
 ---
 
@@ -204,7 +206,7 @@ providers:
 
 Derives `{base_url}/public/api.jsonrpc` for metadata and `{base_url}/public/api.restful` for CSV downloads automatically.
 
-**Note:** PxStat `search()` fetches the full table catalog live (~12,600 tables for CSO) and filters in-memory. Run `scripts/build_catalog.py` to populate `catalog.db` for fast FTS search.
+**Note:** live PxStat `search()` fetches the full table catalog (~12,600 tables for CSO) and filters in-memory. Build `catalog.db` to get fast FTS search instead — see below.
 
 ### Socrata
 
@@ -222,14 +224,28 @@ Uses the Socrata Discovery API for search and SODA for data preview and CSV expo
 
 ## Building the Catalog
 
-Generate catalog metadata for CKAN providers:
+Generate catalog metadata for any configured provider, regardless of type:
 
 ```bash
 uv run python scripts/build_catalog.py --provider centralbank
+uv run python scripts/build_catalog.py --provider cso
 uv run python scripts/build_catalog.py --provider datagovie --limit 500
+uv run python scripts/build_catalog.py --all
 ```
 
 This creates `catalog.db` and enables fast FTS search. Without it, search falls back to live provider APIs.
+
+Each provider implements `iter_catalog()`, which yields records in the CKAN package shape that `catalog.db` stores. How it is sourced differs per type:
+
+| Type | Crawl strategy |
+|------|----------------|
+| `ckan` | Pages `package_search`, then `package_show` per dataset |
+| `socrata` | Pages the Discovery API; metadata comes back inline |
+| `pxstat` | One `ReadCollection` call for all tables, plus `Navigation_API.Read` for themes |
+
+PxStat deliberately does not fetch per-table notes during the crawl — that would be one `ReadMetadata` call per table (~12,600 for CSO). Notes are filled in on demand when you open a dataset page.
+
+To add a new provider type, implement `iter_catalog()` alongside the rest of the `OpenDataProvider` protocol and catalog building works with no changes to the script.
 
 ---
 
@@ -304,15 +320,20 @@ open-data-load \
 
 ## Agent Tools
 
-The plugin exposes agent tools for:
+The plugin exposes eight agent tools:
 
-* Listing providers
-* Searching the catalog
-* Inspecting datasets
-* Loading resources
-* Listing loaded tables
-* Describing tables
-* Sampling rows
+| Tool | Purpose |
+|------|---------|
+| `list_open_data_providers` | Discover configured provider names |
+| `search_open_data_catalog` | Keyword search via FTS, falling back to live provider search |
+| `show_open_data_dataset` | Dataset metadata plus per-resource preview/load URLs |
+| `load_open_data_resource` | Load a resource into `data.db` |
+| `list_loaded_open_data_tables` | List tables already loaded |
+| `describe_loaded_open_data_table` | Column names and types |
+| `sample_loaded_open_data_table` | Sample rows |
+| `suggest_open_data_joins` | Find join keys across loaded tables by column name and Jaccard overlap |
+
+Every tool returns structured JSON and reports failures as `{"error": ...}` rather than raising, so a failed portal call does not end the agent's turn.
 
 ---
 
@@ -337,12 +358,17 @@ datasette-open-data/
 │   ├── build_catalog.py     # Populate catalog.db from provider APIs
 │   └── create_db.py         # Create empty data.db
 ├── tests/
+│   ├── conftest.py               # Fake Datasette / Database / Request
 │   ├── test_ckan_provider.py
 │   ├── test_socrata_provider.py
 │   ├── test_pxstat_provider.py
+│   ├── test_iter_catalog.py      # Catalog crawl for all three provider types
+│   ├── test_build_catalog.py     # End-to-end catalog builds
+│   ├── test_agent_tools.py
 │   ├── test_loader.py
 │   ├── test_registry.py
-│   └── test_views.py
+│   ├── test_views.py             # Pure helpers
+│   └── test_view_handlers.py     # Route handlers and error paths
 ├── .github/
 │   └── workflows/
 │       └── ci.yml           # CI: Python 3.10 / 3.11 / 3.12
@@ -361,7 +387,14 @@ uv sync --group dev
 uv run pytest tests/ -v
 ```
 
-CI runs on every push and pull request across Python 3.10, 3.11, and 3.12.
+Linting and formatting:
+
+```bash
+uv run ruff check .
+uv run ruff format .
+```
+
+CI runs the suite across Python 3.10, 3.11, and 3.12, plus a `ruff check` / `ruff format --check` job, on every push and pull request.
 
 ---
 
@@ -387,9 +420,9 @@ CI runs on every push and pull request across Python 3.10, 3.11, and 3.12.
 
 ### Near Term
 
-* Extend `build_catalog.py` to support PxStat (fast catalog search for CSO)
 * Richer resource previews
-* Agent tool quality improvements
+* Incremental catalog refresh (currently each build resets the provider's rows)
+* Surface catalog build status in the UI
 
 ### Future
 

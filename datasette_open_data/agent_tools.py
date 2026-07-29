@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import html
 import json
+import logging
 
 from .loader import LoadError, load_resource, safe_table_name
 from .registry import get_provider
+from .views import _fts_query
+
+logger = logging.getLogger(__name__)
+
+# suggest_open_data_joins compares every column of every table against every
+# column of every other table, so breadth is capped rather than left unbounded.
+MAX_JOIN_TABLES = 12
 
 
 try:
@@ -179,17 +188,46 @@ def register_open_data_agent_tools(datasette):
 # ---------------------------------------------------------------------------
 
 
-def _fts_query(q: str) -> str:
-    terms = [t.strip() for t in q.replace('"', " ").split() if t.strip()]
-    return " ".join(f"{t}*" for t in terms)
-
-
 def _can_preview(resource) -> bool:
     """True if the resource supports datastore_preview."""
     if resource.datastore_active:
         return True
     fmt = (resource.format or "").lower()
     return fmt == "csv" and bool(resource.url)
+
+
+def _esc(value) -> str:
+    """Escape a value for interpolation into an _html payload.
+
+    Titles, notes and names come from third-party portal APIs, so they are
+    never trusted as markup.
+    """
+    return html.escape(str(value)) if value is not None else ""
+
+
+async def _loaded_tables(db) -> list[str]:
+    return [t for t in await db.table_names() if not t.startswith("_")]
+
+
+async def _resolve_table(db, table: str) -> str:
+    """Return `table` only if it really exists, else raise.
+
+    Table names reach these tools as free text from the model, and they end up
+    interpolated into SQL identifiers. Matching against the real table list
+    means a name can never be anything but an existing table.
+    """
+    names = await db.table_names()
+    if table in names:
+        return table
+
+    lowered = {name.lower(): name for name in names}
+    if table.lower() in lowered:
+        return lowered[table.lower()]
+
+    raise KeyError(
+        f"No table named {table!r} in the 'data' database. "
+        f"Available tables: {', '.join(sorted(names)) or '(none)'}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +270,8 @@ async def _tool_search_open_data_catalog(
         provider_obj = get_provider(datasette, provider)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
+
+    catalog_error = None
 
     # Fast path: FTS search via catalog.db
     if "catalog" in datasette.databases:
@@ -292,36 +332,48 @@ async def _tool_search_open_data_catalog(
                     "_html": _search_results_html(results),
                 }
             )
-        except Exception:
-            pass  # fall through to live search
+        except Exception as exc:
+            # catalog.db is present but unusable (not yet built, stale schema).
+            # Live search still works, so degrade rather than fail — but say why.
+            logger.warning(
+                "Catalog FTS search failed for provider %r, falling back to live "
+                "search: %s",
+                provider_obj.name,
+                exc,
+            )
+            catalog_error = str(exc)
 
     # Slow path: live provider search
     try:
         live_results = await provider_obj.search(query, rows=limit)
-        results = [
-            {
-                "provider": provider_obj.name,
-                "dataset_id": r.id,
-                "title": r.title,
-                "notes": r.notes,
-                "organization": r.organization,
-                "resource_count": len(r.resources),
-                "url": f"/-/open-data/dataset/{r.id}?provider={provider_obj.name}",
-            }
-            for r in live_results
-        ]
-        return json.dumps(
-            {
-                "query": query,
-                "provider": provider_obj.name,
-                "source": "live",
-                "count": len(results),
-                "results": results,
-                "_html": _search_results_html(results),
-            }
-        )
     except Exception as exc:
         return json.dumps({"error": f"Search failed: {exc}"})
+
+    results = [
+        {
+            "provider": provider_obj.name,
+            "dataset_id": r.id,
+            "title": r.title,
+            "notes": r.notes,
+            "organization": r.organization,
+            "resource_count": len(r.resources),
+            "url": f"/-/open-data/dataset/{r.id}?provider={provider_obj.name}",
+        }
+        for r in live_results
+    ]
+
+    payload = {
+        "query": query,
+        "provider": provider_obj.name,
+        "source": "live",
+        "count": len(results),
+        "results": results,
+        "_html": _search_results_html(results),
+    }
+    if catalog_error:
+        payload["catalog_error"] = catalog_error
+
+    return json.dumps(payload)
 
 
 async def _tool_show_open_data_dataset(
@@ -441,8 +493,7 @@ async def _tool_list_loaded_tables(datasette, actor):
 
     try:
         db = datasette.get_database("data")
-        tables = [t for t in await db.table_names() if not t.startswith("_")]
-        return json.dumps({"database": "data", "tables": tables})
+        return json.dumps({"database": "data", "tables": await _loaded_tables(db)})
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -453,6 +504,7 @@ async def _tool_describe_loaded_table(datasette, actor, table: str):
 
     try:
         db = datasette.get_database("data")
+        table = await _resolve_table(db, table)
         rows = await db.execute(f'PRAGMA table_info("{table}")')
         columns = [
             {
@@ -462,6 +514,8 @@ async def _tool_describe_loaded_table(datasette, actor, table: str):
             for row in rows.rows
         ]
         return json.dumps({"database": "data", "table": table, "columns": columns})
+    except KeyError as exc:
+        return json.dumps({"error": exc.args[0]})
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -479,9 +533,12 @@ async def _tool_sample_loaded_table(
 
     try:
         db = datasette.get_database("data")
+        table = await _resolve_table(db, table)
         result = await db.execute(f'SELECT * FROM "{table}" LIMIT ?', [limit])
         rows = [dict(row) for row in result.rows]
         return json.dumps({"database": "data", "table": table, "count": len(rows), "rows": rows})
+    except KeyError as exc:
+        return json.dumps({"error": exc.args[0]})
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -492,7 +549,7 @@ async def _tool_suggest_open_data_joins(datasette, actor):
 
     try:
         db = datasette.get_database("data")
-        tables = [t for t in await db.table_names() if not t.startswith("_")]
+        tables = await _loaded_tables(db)
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
@@ -503,6 +560,10 @@ async def _tool_suggest_open_data_joins(datasette, actor):
                 "tables": tables,
             }
         )
+
+    # Comparison is quadratic in tables and in columns, so cap the breadth.
+    truncated = len(tables) > MAX_JOIN_TABLES
+    tables = tables[:MAX_JOIN_TABLES]
 
     # Sample values per column for each table
     table_cols: dict[str, dict[str, set[str]]] = {}
@@ -564,13 +625,18 @@ async def _tool_suggest_open_data_joins(datasette, actor):
 
     suggestions.sort(key=lambda x: (x["name_match"], x["jaccard"]), reverse=True)
 
-    return json.dumps(
-        {
-            "tables": table_list,
-            "count": len(suggestions),
-            "suggestions": suggestions[:10],
-        }
-    )
+    payload = {
+        "tables": table_list,
+        "count": len(suggestions),
+        "suggestions": suggestions[:10],
+    }
+    if truncated:
+        payload["note"] = (
+            f"Only the first {MAX_JOIN_TABLES} tables were compared. "
+            f"Drop unused tables to widen the search."
+        )
+
+    return json.dumps(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -584,8 +650,8 @@ def _search_results_html(results: list[dict]) -> str:
 
     items = [
         f"""<li>
-          <strong><a href="{r["url"]}">{r["title"]}</a></strong><br>
-          <small>{r["provider"]} &middot; {r["resource_count"]} resources</small>
+          <strong><a href="{_esc(r["url"])}">{_esc(r["title"])}</a></strong><br>
+          <small>{_esc(r["provider"])} &middot; {r["resource_count"]} resources</small>
         </li>"""
         for r in results
     ]
@@ -595,20 +661,20 @@ def _search_results_html(results: list[dict]) -> str:
 def _dataset_html(provider: str, dataset, resources: list[dict]) -> str:
     items = []
     for resource in resources:
-        actions = [f'<a href="{resource["load_url"]}">Load</a>']
+        actions = [f'<a href="{_esc(resource["load_url"])}">Load</a>']
         if resource["preview_url"]:
-            actions.insert(0, f'<a href="{resource["preview_url"]}">Preview</a>')
+            actions.insert(0, f'<a href="{_esc(resource["preview_url"])}">Preview</a>')
         items.append(
             f"""<li>
-              <strong>{resource["name"] or resource["id"]}</strong><br>
-              <small>{resource["format"] or "unknown format"}</small><br>
+              <strong>{_esc(resource["name"] or resource["id"])}</strong><br>
+              <small>{_esc(resource["format"] or "unknown format")}</small><br>
               {" &middot; ".join(actions)}
             </li>"""
         )
 
     return (
-        f"<h3>{dataset.title}</h3>"
-        f"<p>{dataset.notes or ''}</p>"
-        f"<p><small>{provider}</small></p>"
+        f"<h3>{_esc(dataset.title)}</h3>"
+        f"<p>{_esc(dataset.notes)}</p>"
+        f"<p><small>{_esc(provider)}</small></p>"
         f"<ul>{''.join(items)}</ul>"
     )

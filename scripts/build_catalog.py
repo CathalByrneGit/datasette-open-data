@@ -404,6 +404,12 @@ async def build_catalog(
     providers = providers_from_config(config)
     provider = providers[provider_name]
 
+    if not hasattr(provider, "iter_catalog"):
+        raise ValueError(
+            f"Provider {provider_name!r} (type={provider.type!r}) does not support "
+            f"catalog building."
+        )
+
     conn = sqlite3.connect(database)
     conn.row_factory = sqlite3.Row
 
@@ -415,51 +421,22 @@ async def build_catalog(
     package_count = 0
     resource_count = 0
 
-    print(f"Building catalog for provider: {provider_name}")
+    print(f"Building catalog for provider: {provider_name} (type={provider.type})")
     print(f"Writing to: {database}")
 
-    start = 0
+    kwargs: dict[str, Any] = {"limit": limit}
+    if provider.type in ("ckan", "socrata"):
+        kwargs["rows_per_page"] = rows_per_page
 
-    while True:
-        result = await provider._get(
-            "package_search",
-            {
-                "q": "*:*",
-                "rows": rows_per_page,
-                "start": start,
-            },
-        )
+    async for package in provider.iter_catalog(**kwargs):
+        resource_count += upsert_package(conn, provider_name, package)
+        package_count += 1
 
-        results = result.get("results") or []
+        if package_count % 25 == 0:
+            conn.commit()
+            print(f"Loaded {package_count} packages...")
 
-        if not results:
-            break
-
-        for package in results:
-            if limit is not None and package_count >= limit:
-                break
-
-            full_package = await provider._get(
-                "package_show",
-                {"id": package["id"]},
-            )
-
-            resource_count += upsert_package(conn, provider_name, full_package)
-            package_count += 1
-
-            if package_count % 25 == 0:
-                conn.commit()
-                print(f"Loaded {package_count} packages...")
-
-        conn.commit()
-
-        if limit is not None and package_count >= limit:
-            break
-
-        start += rows_per_page
-
-        if start >= result.get("count", 0):
-            break
+    conn.commit()
 
     rebuild_provider_fts(conn, provider_name)
 

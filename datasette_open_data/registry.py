@@ -10,7 +10,6 @@ from .providers.ckan import CKANProvider
 from .providers.pxstat import PxStatProvider
 from .providers.socrata import SocrataProvider
 
-
 DEFAULT_CONFIG = {
     "providers": {
         "centralbank": {

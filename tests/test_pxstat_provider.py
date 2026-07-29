@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from datasette_open_data.providers.pxstat import PxStatError, PxStatProvider
-
 
 # ---------------------------------------------------------------------------
 # Construction / URL derivation

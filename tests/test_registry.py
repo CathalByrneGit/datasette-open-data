@@ -6,7 +6,6 @@ import pytest
 
 from datasette_open_data.registry import get_provider, providers_from_config
 
-
 # ---------------------------------------------------------------------------
 # providers_from_config
 # ---------------------------------------------------------------------------

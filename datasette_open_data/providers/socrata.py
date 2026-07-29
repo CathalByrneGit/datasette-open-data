@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -143,3 +144,95 @@ class SocrataProvider:
             {"id": k, "type": "text"} for k in (records[0].keys() if records else [])
         ]
         return {"records": records, "fields": fields, "total": len(records)}
+
+    async def iter_catalog(
+        self,
+        limit: int | None = None,
+        rows_per_page: int = 100,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Page through the Discovery API, yielding one record per view.
+
+        The Discovery API returns full metadata inline, so unlike CKAN no
+        per-dataset follow-up request is needed.
+        """
+        offset = 0
+        yielded = 0
+
+        while True:
+            data = await self._get(
+                "/api/catalog/v1",
+                {"limit": rows_per_page, "offset": offset, "only": "datasets"},
+            )
+
+            results = data.get("results") or []
+            if not results:
+                return
+
+            for item in results:
+                if limit is not None and yielded >= limit:
+                    return
+
+                resource = item.get("resource") or {}
+                view_id = resource.get("id")
+                if not view_id:
+                    continue
+
+                classification = item.get("classification") or {}
+                title = resource.get("name") or view_id
+                attribution = resource.get("attribution")
+
+                yield {
+                    "id": view_id,
+                    "name": view_id,
+                    "title": title,
+                    "notes": resource.get("description"),
+                    "organization": (
+                        {
+                            "id": attribution,
+                            "name": attribution,
+                            "title": attribution,
+                            "description": None,
+                        }
+                        if attribution
+                        else {}
+                    ),
+                    "license_title": (item.get("metadata") or {}).get("license"),
+                    "url": item.get("permalink") or f"{self.base_url}/d/{view_id}",
+                    "metadata_created": resource.get("createdAt"),
+                    "metadata_modified": resource.get("updatedAt"),
+                    "resources": [
+                        {
+                            "id": view_id,
+                            "name": view_id,
+                            "description": title,
+                            "format": "CSV",
+                            "url": f"{self.base_url}/resource/{view_id}.csv?$limit=50000",
+                            "datastore_active": False,
+                            "created": resource.get("createdAt"),
+                            "last_modified": resource.get("updatedAt"),
+                        }
+                    ],
+                    "tags": [
+                        {"name": tag, "display_name": tag}
+                        for tag in (classification.get("tags") or [])
+                        if tag
+                    ],
+                    "groups": [
+                        {
+                            "id": domain_category,
+                            "name": domain_category,
+                            "title": domain_category,
+                            "description": None,
+                        }
+                        for domain_category in filter(
+                            None, [classification.get("domain_category")]
+                        )
+                    ],
+                }
+
+                yielded += 1
+
+            offset += rows_per_page
+
+            if offset >= data.get("resultSetSize", 0):
+                return
