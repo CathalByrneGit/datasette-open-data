@@ -240,9 +240,7 @@ async def test_load_surfaces_load_error_as_502(stub_provider, monkeypatch, data_
 
 
 async def test_load_resource_metadata_failure_returns_502(stub_provider, data_db):
-    stub_provider["provider"] = StubProvider(
-        resource_error=RuntimeError("resource_show 500")
-    )
+    stub_provider["provider"] = StubProvider(resource_error=RuntimeError("resource_show 500"))
 
     ds = FakeDatasette(databases={"data": data_db})
     request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"})

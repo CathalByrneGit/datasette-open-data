@@ -336,8 +336,7 @@ async def _tool_search_open_data_catalog(
             # catalog.db is present but unusable (not yet built, stale schema).
             # Live search still works, so degrade rather than fail — but say why.
             logger.warning(
-                "Catalog FTS search failed for provider %r, falling back to live "
-                "search: %s",
+                "Catalog FTS search failed for provider %r, falling back to live search: %s",
                 provider_obj.name,
                 exc,
             )
@@ -400,9 +399,7 @@ async def _tool_show_open_data_dataset(
                 if _can_preview(resource)
                 else None
             ),
-            "load_url": (
-                f"/-/open-data/resource/{resource.id}/load?provider={provider_obj.name}"
-            ),
+            "load_url": (f"/-/open-data/resource/{resource.id}/load?provider={provider_obj.name}"),
         }
         for resource in dataset.resources
     ]
@@ -570,16 +567,12 @@ async def _tool_suggest_open_data_joins(datasette, actor):
     for table in tables:
         try:
             col_rows = await db.execute(f'PRAGMA table_info("{table}")')
-            columns = [
-                (row["name"] if "name" in row.keys() else row[1])
-                for row in col_rows.rows
-            ]
+            columns = [(row["name"] if "name" in row.keys() else row[1]) for row in col_rows.rows]
             sample = await db.execute(f'SELECT * FROM "{table}" LIMIT 200')
             rows = [dict(r) for r in sample.rows]
 
             table_cols[table] = {
-                col: {str(r[col]) for r in rows if r.get(col) is not None}
-                for col in columns
+                col: {str(r[col]) for r in rows if r.get(col) is not None} for col in columns
             }
         except Exception:
             continue
@@ -593,9 +586,8 @@ async def _tool_suggest_open_data_joins(datasette, actor):
             for col1, vals1 in table_cols[t1].items():
                 for col2, vals2 in table_cols[t2].items():
                     name_match = col1.lower() == col2.lower()
-                    name_similar = (
-                        not name_match
-                        and (col1.lower() in col2.lower() or col2.lower() in col1.lower())
+                    name_similar = not name_match and (
+                        col1.lower() in col2.lower() or col2.lower() in col1.lower()
                     )
 
                     if not (name_match or name_similar):

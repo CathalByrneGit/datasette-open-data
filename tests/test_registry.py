@@ -65,11 +65,7 @@ def test_providers_from_config_pxstat():
 
 
 def test_providers_from_config_pxstat_default_language():
-    config = {
-        "providers": {
-            "cso": {"type": "pxstat", "base_url": "https://ws.cso.ie"}
-        }
-    }
+    config = {"providers": {"cso": {"type": "pxstat", "base_url": "https://ws.cso.ie"}}}
     providers = providers_from_config(config)
     assert providers["cso"].language == "en"
 

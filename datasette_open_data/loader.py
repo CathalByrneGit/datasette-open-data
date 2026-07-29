@@ -155,9 +155,7 @@ async def load_resource(
 
     if resource_format == "csv":
         if not resource.url:
-            raise LoadError(
-                f"Resource {resource.id!r} has format=CSV but no URL to download from"
-            )
+            raise LoadError(f"Resource {resource.id!r} has format=CSV but no URL to download from")
         return await load_csv_url(
             csv_url=resource.url,
             db_path=db_path,

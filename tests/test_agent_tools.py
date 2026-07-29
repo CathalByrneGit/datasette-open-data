@@ -142,9 +142,7 @@ async def test_resolve_table_rejects_sql_injection(data_db):
 
 
 async def test_list_providers(monkeypatch):
-    monkeypatch.setattr(
-        "datasette_open_data.registry.plugin_config", lambda ds: _CONFIG
-    )
+    monkeypatch.setattr("datasette_open_data.registry.plugin_config", lambda ds: _CONFIG)
     ds = FakeDatasette()
     result = json.loads(await _tool_list_open_data_providers(ds, None))
 
@@ -213,9 +211,7 @@ async def test_search_reports_provider_failure(monkeypatch):
         "datasette_open_data.agent_tools.get_provider", lambda ds, p: FakeProvider()
     )
 
-    result = json.loads(
-        await _tool_search_open_data_catalog(FakeDatasette(), None, query="x")
-    )
+    result = json.loads(await _tool_search_open_data_catalog(FakeDatasette(), None, query="x"))
     assert "portal down" in result["error"]
 
 
@@ -320,9 +316,7 @@ async def test_show_dataset_no_preview_for_unloadable_format(monkeypatch):
         "datasette_open_data.agent_tools.get_provider", lambda ds, p: FakeProvider()
     )
 
-    result = json.loads(
-        await _tool_show_open_data_dataset(FakeDatasette(), None, dataset_id="d")
-    )
+    result = json.loads(await _tool_show_open_data_dataset(FakeDatasette(), None, dataset_id="d"))
     assert result["resources"][0]["preview_url"] is None
 
 
@@ -350,24 +344,16 @@ async def test_show_dataset_reports_error(monkeypatch):
 
 
 async def test_load_resource_requires_data_database(monkeypatch):
-    monkeypatch.setattr(
-        "datasette_open_data.agent_tools.get_provider", lambda ds, p: object()
-    )
-    result = json.loads(
-        await _tool_load_open_data_resource(FakeDatasette(), None, resource_id="r")
-    )
+    monkeypatch.setattr("datasette_open_data.agent_tools.get_provider", lambda ds, p: object())
+    result = json.loads(await _tool_load_open_data_resource(FakeDatasette(), None, resource_id="r"))
     assert "No database named 'data'" in result["error"]
     assert "hint" in result
 
 
 async def test_load_resource_rejects_memory_database(monkeypatch):
-    monkeypatch.setattr(
-        "datasette_open_data.agent_tools.get_provider", lambda ds, p: object()
-    )
+    monkeypatch.setattr("datasette_open_data.agent_tools.get_provider", lambda ds, p: object())
     ds = FakeDatasette(databases={"data": FakeDatabase(None)})
-    result = json.loads(
-        await _tool_load_open_data_resource(ds, None, resource_id="r")
-    )
+    result = json.loads(await _tool_load_open_data_resource(ds, None, resource_id="r"))
     assert "not file-backed" in result["error"]
 
 
@@ -386,9 +372,7 @@ async def test_load_resource_surfaces_load_error(monkeypatch, datasette_with_dat
     )
 
     result = json.loads(
-        await _tool_load_open_data_resource(
-            datasette_with_data, None, resource_id="r1"
-        )
+        await _tool_load_open_data_resource(datasette_with_data, None, resource_id="r1")
     )
     assert "no URL to download from" in result["error"]
 
@@ -426,9 +410,7 @@ async def test_load_resource_success(monkeypatch, datasette_with_data):
     async def fake_load_resource(**kwargs):
         return 42
 
-    monkeypatch.setattr(
-        "datasette_open_data.agent_tools.load_resource", fake_load_resource
-    )
+    monkeypatch.setattr("datasette_open_data.agent_tools.load_resource", fake_load_resource)
 
     result = json.loads(
         await _tool_load_open_data_resource(datasette_with_data, None, resource_id="r")
@@ -471,9 +453,7 @@ async def test_describe_unknown_table_lists_available(datasette_with_data):
 
 async def test_describe_rejects_injected_table_name(datasette_with_data):
     result = json.loads(
-        await _tool_describe_loaded_table(
-            datasette_with_data, None, table='population") --'
-        )
+        await _tool_describe_loaded_table(datasette_with_data, None, table='population") --')
     )
     assert "error" in result
 
@@ -488,17 +468,13 @@ async def test_sample_loaded_table(datasette_with_data):
 
 async def test_sample_clamps_limit(datasette_with_data):
     result = json.loads(
-        await _tool_sample_loaded_table(
-            datasette_with_data, None, table="prices", limit=999
-        )
+        await _tool_sample_loaded_table(datasette_with_data, None, table="prices", limit=999)
     )
     assert result["count"] == 3
 
 
 async def test_sample_unknown_table(datasette_with_data):
-    result = json.loads(
-        await _tool_sample_loaded_table(datasette_with_data, None, table="nope")
-    )
+    result = json.loads(await _tool_sample_loaded_table(datasette_with_data, None, table="nope"))
     assert "No table named" in result["error"]
 
 

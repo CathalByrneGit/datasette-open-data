@@ -396,9 +396,7 @@ async def build_catalog(
 
     if provider_name not in config.get("providers", {}):
         available = ", ".join(config.get("providers", {}).keys())
-        raise ValueError(
-            f"Unknown provider: {provider_name}. Available providers: {available}"
-        )
+        raise ValueError(f"Unknown provider: {provider_name}. Available providers: {available}")
 
     provider_config = config["providers"][provider_name]
     providers = providers_from_config(config)

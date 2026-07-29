@@ -9,9 +9,8 @@ from .registry import get_provider, plugin_config, providers_from_config
 
 
 def _wants_json(request) -> bool:
-    return (
-        request.args.get("_format") == "json"
-        or "application/json" in request.headers.get("accept", "")
+    return request.args.get("_format") == "json" or "application/json" in request.headers.get(
+        "accept", ""
     )
 
 
@@ -30,19 +29,13 @@ def _jsonable(value):
         return [_jsonable(item) for item in value]
 
     if isinstance(value, dict):
-        return {
-            key: _jsonable(item)
-            for key, item in value.items()
-        }
+        return {key: _jsonable(item) for key, item in value.items()}
 
     return value
 
+
 def _fts_query(q: str) -> str:
-    terms = [
-        term.strip()
-        for term in q.replace('"', " ").split()
-        if term.strip()
-    ]
+    terms = [term.strip() for term in q.replace('"', " ").split() if term.strip()]
 
     if not terms:
         return ""
@@ -56,10 +49,7 @@ async def index_view(datasette, request):
     except (KeyError, ValueError) as exc:
         return _error_response(request, f"Invalid provider configuration: {exc}", status=500)
 
-    selected_provider = (
-        request.args.get("provider")
-        or next(iter(providers), None)
-    )
+    selected_provider = request.args.get("provider") or next(iter(providers), None)
 
     catalog = {
         "available": "catalog" in datasette.databases,
@@ -228,13 +218,13 @@ async def search_view(datasette, request):
     search_label = None
 
     if tag:
-        search_label = f'Tag: {tag}'
+        search_label = f"Tag: {tag}"
     elif organization_id:
         search_label = "Organization"
     elif group_id:
         search_label = "Group"
     elif q:
-        search_label = f'Search: {q}'
+        search_label = f"Search: {q}"
 
     can_use_catalog = (
         "catalog" in datasette.databases
@@ -259,9 +249,7 @@ async def search_view(datasette, request):
                 """
             ]
 
-            where = [
-                "p.provider = :provider"
-            ]
+            where = ["p.provider = :provider"]
 
             if q:
                 joins.insert(
@@ -272,7 +260,7 @@ async def search_view(datasette, request):
                      AND m.package_id = p.id
                     JOIN packages_fts fts
                       ON fts.rowid = m.fts_rowid
-                    """
+                    """,
                 )
                 where.append("packages_fts MATCH :query")
                 params["query"] = _fts_query(q)
@@ -303,7 +291,9 @@ async def search_view(datasette, request):
                     )
                 ).first()
                 if org_row:
-                    search_label = f"Organization: {org_row['title'] or org_row['name'] or organization_id}"
+                    search_label = (
+                        f"Organization: {org_row['title'] or org_row['name'] or organization_id}"
+                    )
 
             if group_id:
                 joins.append(
@@ -339,8 +329,8 @@ async def search_view(datasette, request):
                     p.organization_title AS organization,
                     COUNT(DISTINCT r.id) AS resource_count
                 FROM packages p
-                {' '.join(joins)}
-                WHERE {' AND '.join(where)}
+                {" ".join(joins)}
+                WHERE {" AND ".join(where)}
                 GROUP BY p.provider, p.id
                 {"ORDER BY rank" if q else "ORDER BY p.title"}
                 LIMIT :limit
@@ -524,8 +514,7 @@ async def dataset_view(datasette, request):
         except Exception as exc:
             return _error_response(
                 request,
-                f"Could not load dataset {dataset_id!r} from provider "
-                f"{provider.name!r}: {exc}",
+                f"Could not load dataset {dataset_id!r} from provider {provider.name!r}: {exc}",
             )
 
     if _wants_json(request):
@@ -548,6 +537,7 @@ async def dataset_view(datasette, request):
 
     return Response.html(html)
 
+
 async def resource_preview_view(datasette, request):
     try:
         provider = get_provider(datasette, request.args.get("provider"))
@@ -566,8 +556,7 @@ async def resource_preview_view(datasette, request):
     except Exception as exc:
         return _error_response(
             request,
-            f"Could not preview resource {resource_id!r} from provider "
-            f"{provider.name!r}: {exc}",
+            f"Could not preview resource {resource_id!r} from provider {provider.name!r}: {exc}",
         )
 
     if _wants_json(request):
@@ -650,15 +639,10 @@ async def load_resource_view(datasette, request):
     except Exception as exc:
         return _error_response(
             request,
-            f"Could not fetch resource {resource_id!r} from provider "
-            f"{provider.name!r}: {exc}",
+            f"Could not fetch resource {resource_id!r} from provider {provider.name!r}: {exc}",
         )
 
-    table = safe_table_name(
-        request.args.get("table")
-        or resource.name
-        or resource.id
-    )
+    table = safe_table_name(request.args.get("table") or resource.name or resource.id)
 
     try:
         rows_loaded = await load_resource(

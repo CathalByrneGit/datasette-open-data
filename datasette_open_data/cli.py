@@ -25,7 +25,9 @@ def main() -> None:
                 parser.error("Provide --resource-id or --csv-url")
             providers = providers_from_config(DEFAULT_CONFIG)
             provider = providers[args.provider]
-            count = await load_datastore_resource(provider, args.resource_id, args.database, args.table, args.limit)
+            count = await load_datastore_resource(
+                provider, args.resource_id, args.database, args.table, args.limit
+            )
         print(f"Loaded {count} rows into {args.database}:{args.table}")
 
     asyncio.run(run())

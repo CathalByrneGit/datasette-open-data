@@ -68,10 +68,7 @@ class PxStatProvider:
         return data.get("result")
 
     def _csv_url(self, matrix: str) -> str:
-        return (
-            f"{self.rest_base}/PxStat.Data.Cube_API.ReadDataset"
-            f"/{matrix}/CSV/{self.language}/"
-        )
+        return f"{self.rest_base}/PxStat.Data.Cube_API.ReadDataset/{matrix}/CSV/{self.language}/"
 
     # ------------------------------------------------------------------
     # Model converters
@@ -113,9 +110,7 @@ class PxStatProvider:
         notes = " ".join(notes_list) if notes_list else None
 
         copyright_info = meta.get("copyright") or {}
-        organization = (
-            copyright_info.get("name") if isinstance(copyright_info, dict) else None
-        )
+        organization = copyright_info.get("name") if isinstance(copyright_info, dict) else None
 
         return Dataset(
             id=matrix,
@@ -134,9 +129,7 @@ class PxStatProvider:
     # Provider interface
     # ------------------------------------------------------------------
 
-    async def search(
-        self, query: str, rows: int = 20, start: int = 0
-    ) -> list[DatasetSummary]:
+    async def search(self, query: str, rows: int = 20, start: int = 0) -> list[DatasetSummary]:
         result = await self._rpc(
             "PxStat.Data.Cube_API.ReadCollection",
             {"language": self.language},
@@ -145,15 +138,13 @@ class PxStatProvider:
 
         q_lower = query.lower()
         filtered = [
-            item for item in items
+            item
+            for item in items
             if q_lower in (item.get("label") or "").lower()
             or q_lower in ((item.get("extension") or {}).get("matrix") or "").lower()
         ]
 
-        return [
-            self._summary_from_item(item)
-            for item in filtered[start : start + rows]
-        ]
+        return [self._summary_from_item(item) for item in filtered[start : start + rows]]
 
     async def dataset(self, dataset_id: str) -> Dataset:
         meta = await self._rpc(
@@ -207,9 +198,7 @@ class PxStatProvider:
             if s.get("SbjValue")
         ]
 
-    async def datastore_preview(
-        self, resource_id: str, limit: int = 10
-    ) -> dict[str, Any]:
+    async def datastore_preview(self, resource_id: str, limit: int = 10) -> dict[str, Any]:
         csv_url = self._csv_url(resource_id)
         async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
             response = await client.get(csv_url)
@@ -219,9 +208,7 @@ class PxStatProvider:
         reader = csv.DictReader(io.StringIO(text))
         records = [dict(row) for i, row in enumerate(reader) if i < limit]
 
-        fields = [
-            {"id": k, "type": "text"} for k in (records[0].keys() if records else [])
-        ]
+        fields = [{"id": k, "type": "text"} for k in (records[0].keys() if records else [])]
         return {"records": records, "fields": fields, "total": len(records)}
 
     async def iter_catalog(

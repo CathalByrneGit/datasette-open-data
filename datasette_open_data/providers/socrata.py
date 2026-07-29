@@ -83,9 +83,7 @@ class SocrataProvider:
         ]
 
         raw_license = data.get("license")
-        license_title = (
-            raw_license.get("name") if isinstance(raw_license, dict) else raw_license
-        )
+        license_title = raw_license.get("name") if isinstance(raw_license, dict) else raw_license
 
         return Dataset(
             id=view_id,
@@ -100,9 +98,7 @@ class SocrataProvider:
             extras=data,
         )
 
-    async def search(
-        self, query: str, rows: int = 20, start: int = 0
-    ) -> list[DatasetSummary]:
+    async def search(self, query: str, rows: int = 20, start: int = 0) -> list[DatasetSummary]:
         data = await self._get(
             "/api/catalog/v1",
             {"q": query, "limit": rows, "offset": start, "only": "datasets"},
@@ -132,17 +128,11 @@ class SocrataProvider:
         data = await self._get("/api/catalog/v1/tags")
         return [item["tag"] for item in data if item.get("tag")]
 
-    async def datastore_preview(
-        self, resource_id: str, limit: int = 10
-    ) -> dict[str, Any]:
+    async def datastore_preview(self, resource_id: str, limit: int = 10) -> dict[str, Any]:
         records = await self._get(f"/resource/{resource_id}.json", {"$limit": limit})
         if not isinstance(records, list):
-            raise SocrataError(
-                f"Unexpected response from SODA API for resource {resource_id!r}"
-            )
-        fields = [
-            {"id": k, "type": "text"} for k in (records[0].keys() if records else [])
-        ]
+            raise SocrataError(f"Unexpected response from SODA API for resource {resource_id!r}")
+        fields = [{"id": k, "type": "text"} for k in (records[0].keys() if records else [])]
         return {"records": records, "fields": fields, "total": len(records)}
 
     async def iter_catalog(
@@ -224,9 +214,7 @@ class SocrataProvider:
                             "title": domain_category,
                             "description": None,
                         }
-                        for domain_category in filter(
-                            None, [classification.get("domain_category")]
-                        )
+                        for domain_category in filter(None, [classification.get("domain_category")])
                     ],
                 }
 

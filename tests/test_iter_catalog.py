@@ -160,9 +160,7 @@ async def test_pxstat_iter_catalog_shape():
     births = records[0]
     assert births["title"] == "Births Annual"
     assert births["metadata_modified"] == "2024-01-01"
-    assert births["tags"] == [
-        {"name": "Vital Statistics", "display_name": "Vital Statistics"}
-    ]
+    assert births["tags"] == [{"name": "Vital Statistics", "display_name": "Vital Statistics"}]
     assert births["groups"][0]["title"] == "Population"
 
 

@@ -35,9 +35,7 @@ class CKANProvider:
         self.title = title or name
         self.base_url = base_url.rstrip("/")
         self.api_base_url = (api_base_url or f"{self.base_url}/api/3").rstrip("/")
-        self.datastore_api_base_url = (
-            datastore_api_base_url or self.api_base_url
-        ).rstrip("/")
+        self.datastore_api_base_url = (datastore_api_base_url or self.api_base_url).rstrip("/")
         self.timeout = timeout
 
     async def _get(
@@ -88,8 +86,7 @@ class CKANProvider:
                 if tag.get("display_name") or tag.get("name")
             ],
             resources=[
-                self._resource_from_ckan(resource)
-                for resource in data.get("resources", [])
+                self._resource_from_ckan(resource) for resource in data.get("resources", [])
             ],
             extras=data,
         )
@@ -125,10 +122,7 @@ class CKANProvider:
             },
         )
 
-        return [
-            self._summary_from_ckan(item)
-            for item in result.get("results", [])
-        ]
+        return [self._summary_from_ckan(item) for item in result.get("results", [])]
 
     async def dataset(self, dataset_id: str) -> Dataset:
         result = await self._get("package_show", {"id": dataset_id})

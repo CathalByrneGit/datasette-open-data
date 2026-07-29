@@ -36,9 +36,8 @@ def load_providers_file(path: str | Path = "providers.yml") -> dict[str, Any] | 
 def plugin_config(datasette) -> dict[str, Any]:
     if datasette is not None:
         try:
-            config = (
-                datasette.plugin_config("datasette-open-data")
-                or datasette.plugin_config("open-data")
+            config = datasette.plugin_config("datasette-open-data") or datasette.plugin_config(
+                "open-data"
             )
         except Exception:
             config = None

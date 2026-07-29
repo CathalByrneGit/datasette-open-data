@@ -38,7 +38,9 @@ def test_language_defaults_to_en():
 def test_csv_url():
     p = PxStatProvider(name="cso", base_url="https://ws.cso.ie")
     url = p._csv_url("VSA01")
-    assert url == "https://ws.cso.ie/public/api.restful/PxStat.Data.Cube_API.ReadDataset/VSA01/CSV/en/"
+    assert (
+        url == "https://ws.cso.ie/public/api.restful/PxStat.Data.Cube_API.ReadDataset/VSA01/CSV/en/"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -187,8 +189,7 @@ async def test_search_respects_rows_and_start():
         return {
             "link": {
                 "item": [
-                    {"extension": {"matrix": f"T{i:03d}"}, "label": "table"}
-                    for i in range(10)
+                    {"extension": {"matrix": f"T{i:03d}"}, "label": "table"} for i in range(10)
                 ]
             }
         }
@@ -372,7 +373,9 @@ async def test_datastore_preview_parses_csv():
     p = PxStatProvider(name="cso", base_url="https://ws.cso.ie")
     csv_bytes = b"Year,Value,Unit\n2020,100,Number\n2021,105,Number\n2022,110,Number\n"
 
-    with patch("datasette_open_data.providers.pxstat.httpx.AsyncClient", _mock_csv_client(csv_bytes)):
+    with patch(
+        "datasette_open_data.providers.pxstat.httpx.AsyncClient", _mock_csv_client(csv_bytes)
+    ):
         result = await p.datastore_preview("VSA01", limit=2)
 
     assert len(result["records"]) == 2
@@ -383,10 +386,12 @@ async def test_datastore_preview_parses_csv():
 
 async def test_datastore_preview_respects_limit():
     p = PxStatProvider(name="cso", base_url="https://ws.cso.ie")
-    rows = "\n".join(f"{i},{i*10}" for i in range(1, 21))
+    rows = "\n".join(f"{i},{i * 10}" for i in range(1, 21))
     csv_bytes = f"id,val\n{rows}\n".encode()
 
-    with patch("datasette_open_data.providers.pxstat.httpx.AsyncClient", _mock_csv_client(csv_bytes)):
+    with patch(
+        "datasette_open_data.providers.pxstat.httpx.AsyncClient", _mock_csv_client(csv_bytes)
+    ):
         result = await p.datastore_preview("VSA01", limit=5)
 
     assert len(result["records"]) == 5
@@ -396,7 +401,9 @@ async def test_datastore_preview_empty_csv():
     p = PxStatProvider(name="cso", base_url="https://ws.cso.ie")
     csv_bytes = b"Year,Value\n"
 
-    with patch("datasette_open_data.providers.pxstat.httpx.AsyncClient", _mock_csv_client(csv_bytes)):
+    with patch(
+        "datasette_open_data.providers.pxstat.httpx.AsyncClient", _mock_csv_client(csv_bytes)
+    ):
         result = await p.datastore_preview("VSA01")
 
     assert result["records"] == []

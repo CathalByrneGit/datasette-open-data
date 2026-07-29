@@ -19,9 +19,7 @@ _SCRIPTS = Path(__file__).parent.parent / "scripts"
 
 
 def _load_build_catalog():
-    spec = importlib.util.spec_from_file_location(
-        "build_catalog", _SCRIPTS / "build_catalog.py"
-    )
+    spec = importlib.util.spec_from_file_location("build_catalog", _SCRIPTS / "build_catalog.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules["build_catalog"] = module
     spec.loader.exec_module(module)
@@ -50,9 +48,7 @@ class FakeProvider:
             yield record
 
 
-def _pxstat_record(
-    matrix, title, subject="Vital Statistics", theme="Population", theme_id="1"
-):
+def _pxstat_record(matrix, title, subject="Vital Statistics", theme="Population", theme_id="1"):
     return {
         "id": matrix,
         "name": matrix,
@@ -88,9 +84,7 @@ def patched_config(monkeypatch):
     def install(config, providers):
         state["providers"] = providers
         monkeypatch.setattr(build_catalog_module, "plugin_config", lambda ds: config)
-        monkeypatch.setattr(
-            build_catalog_module, "providers_from_config", lambda cfg: providers
-        )
+        monkeypatch.setattr(build_catalog_module, "providers_from_config", lambda cfg: providers)
         return providers
 
     return install
@@ -132,14 +126,10 @@ async def test_build_catalog_works_for_pxstat(tmp_path, patched_config):
     ).fetchall()
     assert [p["id"] for p in packages] == ["CPA01", "VSA01"]
 
-    resources = conn.execute(
-        "SELECT id, format FROM resources WHERE provider = 'cso'"
-    ).fetchall()
+    resources = conn.execute("SELECT id, format FROM resources WHERE provider = 'cso'").fetchall()
     assert {r["format"] for r in resources} == {"CSV"}
 
-    tags = conn.execute(
-        "SELECT name FROM tags WHERE provider = 'cso' ORDER BY name"
-    ).fetchall()
+    tags = conn.execute("SELECT name FROM tags WHERE provider = 'cso' ORDER BY name").fetchall()
     assert [t["name"] for t in tags] == ["Prices", "Vital Statistics"]
 
     groups = conn.execute(
@@ -254,9 +244,7 @@ async def test_socrata_provider_receives_rows_per_page(tmp_path, patched_config)
     )
     patched_config({"providers": {"nyc": {"type": "socrata"}}}, {"nyc": provider})
 
-    await build_catalog_module.build_catalog(
-        "nyc", tmp_path / "catalog.db", rows_per_page=25
-    )
+    await build_catalog_module.build_catalog("nyc", tmp_path / "catalog.db", rows_per_page=25)
 
     assert provider.seen_kwargs == {"limit": None, "rows_per_page": 25}
 
@@ -285,9 +273,7 @@ async def test_build_all_handles_mixed_provider_types(tmp_path, patched_config):
 
     conn = sqlite3.connect(database)
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT provider, id FROM packages ORDER BY provider"
-    ).fetchall()
+    rows = conn.execute("SELECT provider, id FROM packages ORDER BY provider").fetchall()
     conn.close()
 
     assert [(r["provider"], r["id"]) for r in rows] == [

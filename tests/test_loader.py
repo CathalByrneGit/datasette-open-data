@@ -147,9 +147,7 @@ async def test_load_datastore_resource_wraps_error(tmp_path):
     provider._get = fake_get
 
     with pytest.raises(LoadError, match="1 rows already written"):
-        await load_datastore_resource(
-            provider, "res-123", db_path, table="t", batch_size=1
-        )
+        await load_datastore_resource(provider, "res-123", db_path, table="t", batch_size=1)
 
 
 # ---------------------------------------------------------------------------
@@ -204,9 +202,7 @@ async def test_load_csv_url_raises_load_error_on_http_error(tmp_path):
     mock_response.status_code = 404
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(
-        side_effect=httpx.HTTPStatusError(
-            "Not Found", request=MagicMock(), response=mock_response
-        )
+        side_effect=httpx.HTTPStatusError("Not Found", request=MagicMock(), response=mock_response)
     )
     mock_cls = MagicMock()
     mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -255,9 +251,7 @@ async def test_load_resource_datastore_path(tmp_path):
 async def test_load_resource_csv_path(tmp_path):
     db_path = str(tmp_path / "test.db")
     provider = CKANProvider(name="test", base_url="http://example.com")
-    resource = Resource(
-        id="res-2", name="mycsv", format="CSV", url="http://example.com/data.csv"
-    )
+    resource = Resource(id="res-2", name="mycsv", format="CSV", url="http://example.com/data.csv")
     csv_content = b"a,b\n1,2\n"
 
     with patch("datasette_open_data.loader.httpx.AsyncClient", _mock_http_client(csv_content)):
