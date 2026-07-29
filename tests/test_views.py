@@ -7,7 +7,6 @@ import pytest
 from datasette_open_data.models import Dataset, Resource
 from datasette_open_data.views import _fts_query, _jsonable, _wants_json
 
-
 # ---------------------------------------------------------------------------
 # _fts_query
 # ---------------------------------------------------------------------------

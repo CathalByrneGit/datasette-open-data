@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "open_data_base.html" %}
 
 {% block title %}{{ dataset.title }}{% endblock %}
 
@@ -115,7 +115,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block open_data_content %}
 <div class="open-data-wrap">
   <p class="back-link">
     <a href="/-/open-data/search?provider={{ provider.name }}">&larr; Search</a>
@@ -177,10 +177,15 @@
                 </a>
               {% endif %}
 
-              <a class="open-data-btn open-data-btn-primary"
-                 href="/-/open-data/resource/{{ resource.id }}/load?provider={{ provider.name }}">
-                ◍ Load into Datasette
-              </a>
+              {% if can_load %}
+                <form method="POST"
+                      class="open-data-load-form"
+                      action="/-/open-data/resource/{{ resource.id }}/load?provider={{ provider.name }}">
+                  <button type="submit" class="open-data-btn open-data-btn-primary">
+                    ◍ Load into Datasette
+                  </button>
+                </form>
+              {% endif %}
 
               {% if resource.url %}
                 <a class="open-data-btn open-data-btn-outline"

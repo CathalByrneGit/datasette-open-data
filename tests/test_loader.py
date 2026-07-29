@@ -17,7 +17,6 @@ from datasette_open_data.loader import (
 from datasette_open_data.models import Resource
 from datasette_open_data.providers.ckan import CKANProvider
 
-
 # ---------------------------------------------------------------------------
 # safe_table_name
 # ---------------------------------------------------------------------------
@@ -55,13 +54,18 @@ def test_insert_rows_returns_count(tmp_path):
     assert list(db["scores"].rows) == rows
 
 
-def test_insert_rows_empty_creates_table(tmp_path):
+def test_insert_rows_empty_creates_no_table(tmp_path):
+    """An empty result must not leave a placeholder table behind.
+
+    A stub table would surface in list_loaded_open_data_tables and in join
+    suggestions as though it held data.
+    """
     db_path = str(tmp_path / "test.db")
     count = _insert_rows(db_path, "empty_table", [])
     assert count == 0
 
     db = Database(db_path)
-    assert "empty_table" in db.table_names()
+    assert "empty_table" not in db.table_names()
 
 
 def test_insert_rows_accumulates_without_pk(tmp_path):
@@ -143,9 +147,7 @@ async def test_load_datastore_resource_wraps_error(tmp_path):
     provider._get = fake_get
 
     with pytest.raises(LoadError, match="1 rows already written"):
-        await load_datastore_resource(
-            provider, "res-123", db_path, table="t", batch_size=1
-        )
+        await load_datastore_resource(provider, "res-123", db_path, table="t", batch_size=1)
 
 
 # ---------------------------------------------------------------------------
@@ -200,9 +202,7 @@ async def test_load_csv_url_raises_load_error_on_http_error(tmp_path):
     mock_response.status_code = 404
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(
-        side_effect=httpx.HTTPStatusError(
-            "Not Found", request=MagicMock(), response=mock_response
-        )
+        side_effect=httpx.HTTPStatusError("Not Found", request=MagicMock(), response=mock_response)
     )
     mock_cls = MagicMock()
     mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -251,9 +251,7 @@ async def test_load_resource_datastore_path(tmp_path):
 async def test_load_resource_csv_path(tmp_path):
     db_path = str(tmp_path / "test.db")
     provider = CKANProvider(name="test", base_url="http://example.com")
-    resource = Resource(
-        id="res-2", name="mycsv", format="CSV", url="http://example.com/data.csv"
-    )
+    resource = Resource(id="res-2", name="mycsv", format="CSV", url="http://example.com/data.csv")
     csv_content = b"a,b\n1,2\n"
 
     with patch("datasette_open_data.loader.httpx.AsyncClient", _mock_http_client(csv_content)):
@@ -276,5 +274,7 @@ async def test_load_resource_unsupported_raises(tmp_path):
     provider = CKANProvider(name="test", base_url="http://example.com")
     resource = Resource(id="res-4", name="weird", format="XLS")
 
-    with pytest.raises(ValueError, match="unsupported format"):
+    # LoadError, not a bare ValueError, so callers can catch every load
+    # failure with a single except clause.
+    with pytest.raises(LoadError, match="unsupported format"):
         await load_resource(provider, resource, db_path)

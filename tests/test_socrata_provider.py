@@ -4,7 +4,6 @@ import pytest
 
 from datasette_open_data.providers.socrata import SocrataError, SocrataProvider
 
-
 # ---------------------------------------------------------------------------
 # URL construction
 # ---------------------------------------------------------------------------

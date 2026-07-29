@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "open_data_base.html" %}
 
 {% block title %}Resource Preview{% endblock %}
 
@@ -47,7 +47,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block open_data_content %}
 <div class="open-data-wrap">
   <p><a href="/-/open-data">&larr; Open Data Explorer</a></p>
 
@@ -58,10 +58,15 @@
     <p><strong>Resource ID:</strong> <code>{{ resource_id }}</code></p>
 
     <p>
-      <a class="open-data-btn"
-         href="/-/open-data/resource/{{ resource_id }}/load?provider={{ provider.name }}">
-        Load into Datasette
-      </a>
+      {% if can_load %}
+        <form method="POST"
+              class="open-data-load-form"
+              action="/-/open-data/resource/{{ resource_id }}/load?provider={{ provider.name }}">
+          <button type="submit" class="open-data-btn">
+            Load into Datasette
+          </button>
+        </form>
+      {% endif %}
 
       <a class="open-data-btn open-data-btn-outline"
          href="/-/open-data/resource/{{ resource_id }}/preview?provider={{ provider.name }}&_format=json">

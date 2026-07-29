@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -67,10 +68,7 @@ class PxStatProvider:
         return data.get("result")
 
     def _csv_url(self, matrix: str) -> str:
-        return (
-            f"{self.rest_base}/PxStat.Data.Cube_API.ReadDataset"
-            f"/{matrix}/CSV/{self.language}/"
-        )
+        return f"{self.rest_base}/PxStat.Data.Cube_API.ReadDataset/{matrix}/CSV/{self.language}/"
 
     # ------------------------------------------------------------------
     # Model converters
@@ -112,9 +110,7 @@ class PxStatProvider:
         notes = " ".join(notes_list) if notes_list else None
 
         copyright_info = meta.get("copyright") or {}
-        organization = (
-            copyright_info.get("name") if isinstance(copyright_info, dict) else None
-        )
+        organization = copyright_info.get("name") if isinstance(copyright_info, dict) else None
 
         return Dataset(
             id=matrix,
@@ -133,9 +129,7 @@ class PxStatProvider:
     # Provider interface
     # ------------------------------------------------------------------
 
-    async def search(
-        self, query: str, rows: int = 20, start: int = 0
-    ) -> list[DatasetSummary]:
+    async def search(self, query: str, rows: int = 20, start: int = 0) -> list[DatasetSummary]:
         result = await self._rpc(
             "PxStat.Data.Cube_API.ReadCollection",
             {"language": self.language},
@@ -144,15 +138,13 @@ class PxStatProvider:
 
         q_lower = query.lower()
         filtered = [
-            item for item in items
+            item
+            for item in items
             if q_lower in (item.get("label") or "").lower()
             or q_lower in ((item.get("extension") or {}).get("matrix") or "").lower()
         ]
 
-        return [
-            self._summary_from_item(item)
-            for item in filtered[start : start + rows]
-        ]
+        return [self._summary_from_item(item) for item in filtered[start : start + rows]]
 
     async def dataset(self, dataset_id: str) -> Dataset:
         meta = await self._rpc(
@@ -206,9 +198,7 @@ class PxStatProvider:
             if s.get("SbjValue")
         ]
 
-    async def datastore_preview(
-        self, resource_id: str, limit: int = 10
-    ) -> dict[str, Any]:
+    async def datastore_preview(self, resource_id: str, limit: int = 10) -> dict[str, Any]:
         csv_url = self._csv_url(resource_id)
         async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
             response = await client.get(csv_url)
@@ -218,7 +208,88 @@ class PxStatProvider:
         reader = csv.DictReader(io.StringIO(text))
         records = [dict(row) for i, row in enumerate(reader) if i < limit]
 
-        fields = [
-            {"id": k, "type": "text"} for k in (records[0].keys() if records else [])
-        ]
+        fields = [{"id": k, "type": "text"} for k in (records[0].keys() if records else [])]
         return {"records": records, "fields": fields, "total": len(records)}
+
+    async def iter_catalog(
+        self,
+        limit: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield one catalog record per PxStat matrix.
+
+        ReadCollection returns every table in a single response, carrying the
+        matrix code, label and subject. Theme (group) membership comes from the
+        navigation tree, fetched once and joined on subject code.
+
+        Per-table notes are deliberately not fetched: that would mean one
+        ReadMetadata call per table (~12,600 for CSO). Notes are filled in
+        on demand by dataset().
+        """
+        theme_by_subject: dict[str, dict[str, Any]] = {}
+        try:
+            tree = await self._rpc(
+                "PxStat.System.Navigation.Navigation_API.Read",
+                {"LngIsoCode": self.language},
+            )
+            for theme in tree or []:
+                group = {
+                    "id": str(theme.get("ThmCode")),
+                    "name": theme.get("ThmValue"),
+                    "title": theme.get("ThmValue"),
+                    "description": None,
+                }
+                for subject in theme.get("subject") or []:
+                    theme_by_subject[str(subject.get("SbjCode"))] = group
+        except (PxStatError, httpx.HTTPError):
+            # Navigation is a nice-to-have; the catalog is still usable without it.
+            pass
+
+        result = await self._rpc(
+            "PxStat.Data.Cube_API.ReadCollection",
+            {"language": self.language},
+        )
+        items = (result or {}).get("link", {}).get("item") or []
+
+        for index, item in enumerate(items):
+            if limit is not None and index >= limit:
+                return
+
+            ext = item.get("extension") or {}
+            matrix = ext.get("matrix")
+            if not matrix:
+                continue
+
+            title = item.get("label") or matrix
+            subject = ext.get("subject") or {}
+            subject_value = subject.get("SbjValue")
+            group = theme_by_subject.get(str(subject.get("SbjCode")))
+
+            yield {
+                "id": matrix,
+                "name": matrix,
+                "title": title,
+                "notes": None,
+                "organization": {},
+                "license_title": None,
+                "url": f"{self.base_url}/en/{matrix}",
+                "metadata_created": None,
+                "metadata_modified": item.get("updated"),
+                "resources": [
+                    {
+                        "id": matrix,
+                        "name": matrix,
+                        "description": title,
+                        "format": "CSV",
+                        "url": self._csv_url(matrix),
+                        "datastore_active": False,
+                        "created": None,
+                        "last_modified": item.get("updated"),
+                    }
+                ],
+                "tags": (
+                    [{"name": subject_value, "display_name": subject_value}]
+                    if subject_value
+                    else []
+                ),
+                "groups": [group] if group else [],
+            }

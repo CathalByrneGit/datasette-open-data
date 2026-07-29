@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "datasette-open-data"
 version = "0.1.0"
-description = "Datasette plugin for searching and loading open data portal resources, starting with CKAN."
+description = "Datasette plugin for searching and loading open data portal resources from CKAN, Socrata and PxStat."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -28,10 +28,26 @@ prerelease = "allow"
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+    "ruff>=0.8",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # long lines are reported by the formatter, not the linter
+    "B008",  # provider defaults are constructed at import time on purpose
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests import fixtures from conftest by name, which ruff reads as a shadowed import.
+"tests/*" = ["E402"]
 [project.urls]
 Homepage = "https://github.com/cathal470/datasette-open-data"
 
@@ -45,4 +61,4 @@ open-data-load = "datasette_open_data.cli:main"
 include = ["datasette_open_data*"]
 
 [tool.setuptools.package-data]
-datasette_open_data = ["templates/*.html"]
+datasette_open_data = ["templates/*.html", "static/*"]

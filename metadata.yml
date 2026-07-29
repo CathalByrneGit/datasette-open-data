@@ -15,8 +15,10 @@ settings:
   max_returned_rows: 15000
   facet_time_limit_ms: 3000
   suggest_facets: true
-  extra_css_urls:
-    - /static/custom.css
+
+# custom.css is applied by the plugin's extra_css_urls hook and served from
+# datasette_open_data/static/. It is not listed here: extra_css_urls is not a
+# Datasette setting, and Datasette rejects it as one.
 
 databases:
   catalog:

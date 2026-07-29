@@ -1,0 +1,25 @@
+{#
+  Base template for this plugin's own pages only.
+
+  Deliberately NOT named base.html: Datasette prepends every plugin's template
+  directory to the Jinja loader path, so a plugin template named base.html
+  silently replaces Datasette's for the whole instance, including core pages
+  and other plugins' pages.
+
+  The site-wide skin lives in static/custom.css and is applied through the
+  extra_css_urls hook instead.
+#}
+{% extends "default:base.html" %}
+
+{% block body_class %}open-data{% endblock %}
+
+{% block content %}
+  <header class="open-data-header">
+    <h1>
+      <a href="/-/open-data">Open Data Explorer</a>
+    </h1>
+    <p class="open-data-tagline">Catalog // Load // Query // Analyze</p>
+  </header>
+
+  {% block open_data_content %}{% endblock %}
+{% endblock %}

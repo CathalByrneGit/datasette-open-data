@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from datasette_open_data.providers.ckan import CKANProvider, CKANError
-
+from datasette_open_data.providers.ckan import CKANError, CKANProvider
 
 # ---------------------------------------------------------------------------
 # URL construction

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 import httpx
 from sqlite_utils import Database
@@ -26,15 +28,33 @@ def _insert_rows(
     rows: Iterable[dict[str, Any]],
     replace: bool = True,
 ) -> int:
-    db = Database(db_path)
+    """Write rows synchronously. Callers in async code must use _insert_rows_async."""
     rows = list(rows)
 
     if not rows:
-        db[table].create({"_empty": str}, pk=None, if_not_exists=True)
+        # No table is created for an empty result: an empty placeholder would
+        # show up in list_loaded_open_data_tables and join suggestions as if
+        # it held data.
         return 0
 
+    db = Database(db_path)
     db[table].insert_all(rows, replace=replace, alter=True)
     return len(rows)
+
+
+async def _insert_rows_async(
+    db_path: str,
+    table: str,
+    rows: Iterable[dict[str, Any]],
+    replace: bool = True,
+) -> int:
+    """Run the sqlite_utils write on a worker thread.
+
+    sqlite_utils is synchronous; calling it directly from a coroutine blocks
+    Datasette's event loop for the whole write, which for a 50k-row load means
+    the server stops serving until it finishes.
+    """
+    return await asyncio.to_thread(_insert_rows, db_path, table, rows, replace)
 
 
 async def load_datastore_resource(
@@ -48,7 +68,6 @@ async def load_datastore_resource(
     table = safe_table_name(table or resource_id)
     batch_size = min(batch_size, limit)
 
-    db = Database(db_path)
     total = 0
     offset = 0
 
@@ -77,7 +96,7 @@ async def load_datastore_resource(
         if not records:
             break
 
-        db[table].insert_all(records, alter=True)
+        await _insert_rows_async(db_path, table, records, replace=False)
 
         count = len(records)
         total += count
@@ -109,7 +128,7 @@ async def load_csv_url(
     try:
         text = response.content.decode(encoding, errors="replace")
         reader = csv.DictReader(io.StringIO(text))
-        return _insert_rows(db_path, safe_table_name(table), reader)
+        return await _insert_rows_async(db_path, safe_table_name(table), reader)
     except csv.Error as exc:
         raise LoadError(f"CSV parse error from {csv_url!r}: {exc}") from exc
 
@@ -136,16 +155,14 @@ async def load_resource(
 
     if resource_format == "csv":
         if not resource.url:
-            raise LoadError(
-                f"Resource {resource.id!r} has format=CSV but no URL to download from"
-            )
+            raise LoadError(f"Resource {resource.id!r} has format=CSV but no URL to download from")
         return await load_csv_url(
             csv_url=resource.url,
             db_path=db_path,
             table=table_name,
         )
 
-    raise ValueError(
+    raise LoadError(
         f"Cannot load resource {resource.id!r}: "
         f"unsupported format={resource.format!r}, "
         f"datastore_active={resource.datastore_active!r}"
