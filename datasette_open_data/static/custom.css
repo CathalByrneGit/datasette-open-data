@@ -570,3 +570,28 @@ table.rows-and-columns td {
     margin-right: 0.5rem !important;
   }
 }
+/* ==========================================================================
+   Open Data page header
+   Previously inline styles in a base.html that shadowed Datasette's own
+   template; now scoped to this plugin's pages via open_data_base.html.
+   ========================================================================== */
+
+.open-data-header {
+  max-width: 1080px !important;
+  margin: 40px auto 24px !important;
+  border-bottom: 1px dashed var(--border-color) !important;
+  padding-bottom: 20px !important;
+}
+
+.open-data-header h1 {
+  font-size: 1.5rem !important;
+  font-weight: 700 !important;
+  margin: 0 !important;
+}
+
+.open-data-tagline {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-size: 0.85rem !important;
+  margin: 5px 0 0 0 !important;
+  color: #555 !important;
+}

@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "open_data_base.html" %}
 
 {% block title %}{{ dataset.title }}{% endblock %}
 
@@ -115,7 +115,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block open_data_content %}
 <div class="open-data-wrap">
   <p class="back-link">
     <a href="/-/open-data/search?provider={{ provider.name }}">&larr; Search</a>

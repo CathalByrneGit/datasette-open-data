@@ -61,4 +61,4 @@ open-data-load = "datasette_open_data.cli:main"
 include = ["datasette_open_data*"]
 
 [tool.setuptools.package-data]
-datasette_open_data = ["templates/*.html"]
+datasette_open_data = ["templates/*.html", "static/*"]

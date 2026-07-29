@@ -266,13 +266,13 @@ This creates `data.db`.
 ```bash
 uv run datasette serve data.db catalog.db \
   -m metadata.yml \
-  --template-dir datasette_open_data/templates \
-  --static static:static \
   --internal internal.db \
   --port 8001 \
   --root \
   --reload
 ```
+
+No `--template-dir` or `--static` flags are needed. Datasette discovers `datasette_open_data/templates/` and mounts `datasette_open_data/static/` at `/-/static-plugins/datasette-open-data/` automatically once the plugin is installed.
 
 ```text
 http://127.0.0.1:8001/-/open-data
@@ -349,11 +349,14 @@ datasette-open-data/
 │   ├── views.py             # Route handlers
 │   ├── agent_tools.py       # LLM agent tool definitions
 │   ├── cli.py               # CLI entry point
-│   └── providers/
-│       ├── base.py          # OpenDataProvider protocol
-│       ├── ckan.py          # CKAN provider
-│       ├── socrata.py       # Socrata / SODA provider
-│       └── pxstat.py        # PxStat provider (CSO Ireland)
+│   ├── providers/
+│   │   ├── base.py          # OpenDataProvider protocol
+│   │   ├── ckan.py          # CKAN provider
+│   │   ├── socrata.py       # Socrata / SODA provider
+│   │   └── pxstat.py        # PxStat provider (CSO Ireland)
+│   ├── templates/           # open_data_base.html is namespaced on purpose so
+│   │                        # it cannot shadow Datasette's own base.html
+│   └── static/              # Mounted at /-/static-plugins/datasette-open-data/
 ├── scripts/
 │   ├── build_catalog.py     # Populate catalog.db from provider APIs
 │   └── create_db.py         # Create empty data.db
@@ -372,8 +375,6 @@ datasette-open-data/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml           # CI: Python 3.10 / 3.11 / 3.12
-├── templates/
-├── static/
 ├── providers.yml
 └── metadata.yml
 ```

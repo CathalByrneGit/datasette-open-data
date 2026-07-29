@@ -40,5 +40,19 @@ def menu_links(datasette, actor):
 
 
 @hookimpl
+def extra_css_urls():
+    """Apply the Open Data skin across the instance.
+
+    custom.css restyles Datasette's own chrome (body, .hd, .ft, .metadata), so
+    it is deliberately global. It is served from datasette_open_data/static/,
+    which Datasette mounts automatically -- no --static flag needed.
+
+    To limit the skin to this plugin's own pages instead, take the `template`
+    argument and return the URL only when it starts with "open_data_".
+    """
+    return ["/-/static-plugins/datasette-open-data/custom.css"]
+
+
+@hookimpl
 def register_agent_tools(datasette):
     return register_open_data_agent_tools(datasette)
