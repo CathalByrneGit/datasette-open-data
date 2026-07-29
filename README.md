@@ -282,16 +282,44 @@ http://127.0.0.1:8001/-/open-data
 
 ## Available Routes
 
-| Route | Description |
-|-------|-------------|
-| `/-/open-data` | Open Data explorer homepage |
-| `/-/open-data/search?q=mortgage` | Search datasets |
-| `/-/open-data/dataset/{id}` | Dataset metadata and resources |
-| `/-/open-data/resource/{id}/preview` | Preview resource records |
-| `/-/open-data/resource/{id}/load` | Load resource into `data.db` |
-| `/-/open-data/groups` | Browse groups / themes |
-| `/-/open-data/organizations` | Browse organizations |
-| `/-/open-data/tags` | Browse tags / subjects |
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/-/open-data` | Open Data explorer homepage |
+| GET | `/-/open-data/search?q=mortgage` | Search datasets |
+| GET | `/-/open-data/dataset/{id}` | Dataset metadata and resources |
+| GET | `/-/open-data/resource/{id}/preview` | Preview resource records |
+| **POST** | `/-/open-data/resource/{id}/load` | Load resource into `data.db` |
+| GET | `/-/open-data/groups` | Browse groups / themes |
+| GET | `/-/open-data/organizations` | Browse organizations |
+| GET | `/-/open-data/tags` | Browse tags / subjects |
+
+---
+
+## Permissions
+
+Loading a resource creates a table in `data.db` and inserts rows into it, so it is a write. Two things guard it:
+
+* It requires **POST**. A GET returns 405. Datasette's CSRF protection treats GET, HEAD and OPTIONS as safe methods, so a load endpoint reachable by GET would be triggerable cross-site by anything that makes the browser issue a request — an `<img>` tag, a link prefetcher, a crawler.
+* It requires the **`insert-row`** permission on the `data` database. This is Datasette's own permission rather than a bespoke one, so existing `allow` blocks, API tokens and auth plugins govern it with no extra configuration.
+
+`insert-row` is not allowed by default, so an anonymous instance can browse and preview but not load. To grant it:
+
+```bash
+# Simplest for local use: sign in as root via the URL printed at startup
+uv run datasette serve data.db catalog.db -m metadata.yml --root
+```
+
+Or grant it explicitly in your configuration:
+
+```yaml
+databases:
+  data:
+    permissions:
+      insert-row:
+        id: alice
+```
+
+The Load button is hidden from actors who lack the permission, and the `load_open_data_resource` agent tool enforces the same check — it writes directly rather than going through the route, so it would otherwise be a way around it.
 
 ---
 
@@ -333,7 +361,7 @@ The plugin exposes eight agent tools:
 | `sample_loaded_open_data_table` | Sample rows |
 | `suggest_open_data_joins` | Find join keys across loaded tables by column name and Jaccard overlap |
 
-Every tool returns structured JSON and reports failures as `{"error": ...}` rather than raising, so a failed portal call does not end the agent's turn.
+Every tool returns structured JSON and reports failures as `{"error": ...}` rather than raising, so a failed portal call does not end the agent's turn. `load_open_data_resource` enforces the same `insert-row` permission as the web route — see [Permissions](#permissions).
 
 ---
 

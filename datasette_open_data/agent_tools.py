@@ -6,7 +6,7 @@ import logging
 
 from .loader import LoadError, load_resource, safe_table_name
 from .registry import get_provider
-from .views import _fts_query
+from .views import LOAD_PERMISSION, _can_load, _fts_query
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +400,8 @@ async def _tool_show_open_data_dataset(
                 else None
             ),
             "load_url": (f"/-/open-data/resource/{resource.id}/load?provider={provider_obj.name}"),
+            # Spelled out so the model doesn't present load_url as a plain link.
+            "load_method": "POST",
         }
         for resource in dataset.resources
     ]
@@ -426,6 +428,18 @@ async def _tool_load_open_data_resource(
     table: str | None = None,
     limit: int = 50_000,
 ):
+    # The tool writes to the database without going through load_resource_view,
+    # so it has to enforce the same permission itself or it becomes a bypass.
+    if not await _can_load(datasette, actor):
+        return json.dumps(
+            {
+                "error": (
+                    f"Permission denied: loading a resource requires the "
+                    f"{LOAD_PERMISSION!r} permission on the 'data' database."
+                )
+            }
+        )
+
     try:
         provider_obj = get_provider(datasette, provider)
     except Exception as exc:
@@ -653,7 +667,13 @@ def _search_results_html(results: list[dict]) -> str:
 def _dataset_html(provider: str, dataset, resources: list[dict]) -> str:
     items = []
     for resource in resources:
-        actions = [f'<a href="{_esc(resource["load_url"])}">Load</a>']
+        # Loading is a POST, so it is a form button rather than a link.
+        actions = [
+            f'<form method="POST" action="{_esc(resource["load_url"])}" '
+            f'style="display:inline">'
+            f'<button type="submit">Load</button>'
+            f"</form>"
+        ]
         if resource["preview_url"]:
             actions.insert(0, f'<a href="{_esc(resource["preview_url"])}">Preview</a>')
         items.append(

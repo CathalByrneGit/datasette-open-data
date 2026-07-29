@@ -106,22 +106,24 @@ def stub_provider(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "view,url_vars",
+    "view,url_vars,method",
     [
-        (search_view, {}),
-        (dataset_view, {"dataset_id": "d1"}),
-        (resource_preview_view, {"resource_id": "r1"}),
-        (load_resource_view, {"resource_id": "r1"}),
-        (groups_view, {}),
-        (organizations_view, {}),
-        (tags_view, {}),
+        (search_view, {}, "GET"),
+        (dataset_view, {"dataset_id": "d1"}, "GET"),
+        (resource_preview_view, {"resource_id": "r1"}, "GET"),
+        (load_resource_view, {"resource_id": "r1"}, "POST"),
+        (groups_view, {}, "GET"),
+        (organizations_view, {}, "GET"),
+        (tags_view, {}, "GET"),
     ],
 )
-async def test_unknown_provider_returns_404(stub_provider, view, url_vars):
+async def test_unknown_provider_returns_404(stub_provider, view, url_vars, method):
     stub_provider["get_provider_error"] = KeyError("Unknown open data provider: 'nope'")
 
     request = FakeRequest(
-        args={**JSON_REQUEST_ARGS, "provider": "nope", "q": "x"}, url_vars=url_vars
+        args={**JSON_REQUEST_ARGS, "provider": "nope", "q": "x"},
+        url_vars=url_vars,
+        method=method,
     )
     response = await view(FakeDatasette(), request)
 
@@ -203,13 +205,93 @@ async def test_organizations_view_success(stub_provider):
 
 
 # ---------------------------------------------------------------------------
+# load_resource_view: method and permission gating
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD", "PUT", "DELETE"])
+async def test_load_rejects_non_post(stub_provider, data_db, method):
+    """Loading writes, so it must not be reachable by a method Datasette's CSRF
+    layer treats as safe -- an <img> tag or link prefetcher would trigger it."""
+    ds = FakeDatasette(databases={"data": data_db})
+    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"}, method=method)
+    response = await load_resource_view(ds, request)
+
+    assert response.status == 405
+    assert "requires POST" in _json(response)["error"]
+
+
+async def test_load_get_does_not_touch_the_database(stub_provider, monkeypatch, data_db):
+    """A rejected GET must short-circuit before any loading happens."""
+    called = False
+
+    async def fake_load(**kwargs):
+        nonlocal called
+        called = True
+        return 1
+
+    monkeypatch.setattr("datasette_open_data.views.load_resource", fake_load)
+
+    ds = FakeDatasette(databases={"data": data_db})
+    request = FakeRequest(url_vars={"resource_id": "r1"}, method="GET")
+    await load_resource_view(ds, request)
+
+    assert called is False
+
+
+async def test_load_denied_without_permission(stub_provider, data_db):
+    ds = FakeDatasette(databases={"data": data_db}, allow=False)
+    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"}, method="POST")
+    response = await load_resource_view(ds, request)
+
+    assert response.status == 403
+    assert "insert-row" in _json(response)["error"]
+
+
+async def test_load_checks_insert_row_on_data_database(stub_provider, monkeypatch, data_db):
+    async def fake_load(**kwargs):
+        return 1
+
+    monkeypatch.setattr("datasette_open_data.views.load_resource", fake_load)
+
+    ds = FakeDatasette(databases={"data": data_db})
+    request = FakeRequest(
+        args=JSON_REQUEST_ARGS,
+        url_vars={"resource_id": "r1"},
+        method="POST",
+        actor={"id": "alice"},
+    )
+    await load_resource_view(ds, request)
+
+    action, resource, actor = ds.permission_checks[0]
+    assert action == "insert-row"
+    assert resource.parent == "data"
+    assert actor == {"id": "alice"}
+
+
+async def test_load_denied_before_provider_lookup(stub_provider, data_db):
+    """Permission is checked first, so a denial can't be probed for provider names."""
+    stub_provider["get_provider_error"] = KeyError("Unknown open data provider: 'nope'")
+
+    ds = FakeDatasette(databases={"data": data_db}, allow=False)
+    request = FakeRequest(
+        args={**JSON_REQUEST_ARGS, "provider": "nope"},
+        url_vars={"resource_id": "r1"},
+        method="POST",
+    )
+    response = await load_resource_view(ds, request)
+
+    assert response.status == 403
+
+
+# ---------------------------------------------------------------------------
 # load_resource_view
 # ---------------------------------------------------------------------------
 
 
 async def test_load_without_data_database_returns_400(stub_provider):
     """This used to raise KeyError and surface as a 500."""
-    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"})
+    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"}, method="POST")
     response = await load_resource_view(FakeDatasette(), request)
 
     assert response.status == 400
@@ -218,7 +300,7 @@ async def test_load_without_data_database_returns_400(stub_provider):
 
 async def test_load_with_memory_database_returns_400(stub_provider):
     ds = FakeDatasette(databases={"data": FakeDatabase(None)})
-    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"})
+    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"}, method="POST")
     response = await load_resource_view(ds, request)
 
     assert response.status == 400
@@ -232,7 +314,7 @@ async def test_load_surfaces_load_error_as_502(stub_provider, monkeypatch, data_
     monkeypatch.setattr("datasette_open_data.views.load_resource", failing_load)
 
     ds = FakeDatasette(databases={"data": data_db})
-    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"})
+    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"}, method="POST")
     response = await load_resource_view(ds, request)
 
     assert response.status == 502
@@ -243,7 +325,7 @@ async def test_load_resource_metadata_failure_returns_502(stub_provider, data_db
     stub_provider["provider"] = StubProvider(resource_error=RuntimeError("resource_show 500"))
 
     ds = FakeDatasette(databases={"data": data_db})
-    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"})
+    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"}, method="POST")
     response = await load_resource_view(ds, request)
 
     assert response.status == 502
@@ -253,7 +335,9 @@ async def test_load_resource_metadata_failure_returns_502(stub_provider, data_db
 async def test_load_bad_limit_returns_400(stub_provider, data_db):
     ds = FakeDatasette(databases={"data": data_db})
     request = FakeRequest(
-        args={**JSON_REQUEST_ARGS, "limit": "lots"}, url_vars={"resource_id": "r1"}
+        args={**JSON_REQUEST_ARGS, "limit": "lots"},
+        url_vars={"resource_id": "r1"},
+        method="POST",
     )
     response = await load_resource_view(ds, request)
 
@@ -268,7 +352,7 @@ async def test_load_success_returns_json(stub_provider, monkeypatch, data_db):
     monkeypatch.setattr("datasette_open_data.views.load_resource", fake_load)
 
     ds = FakeDatasette(databases={"data": data_db})
-    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"})
+    request = FakeRequest(args=JSON_REQUEST_ARGS, url_vars={"resource_id": "r1"}, method="POST")
     response = await load_resource_view(ds, request)
 
     payload = _json(response)
@@ -284,7 +368,7 @@ async def test_load_success_redirects_for_html(stub_provider, monkeypatch, data_
     monkeypatch.setattr("datasette_open_data.views.load_resource", fake_load)
 
     ds = FakeDatasette(databases={"data": data_db})
-    request = FakeRequest(url_vars={"resource_id": "r1"})
+    request = FakeRequest(url_vars={"resource_id": "r1"}, method="POST")
     response = await load_resource_view(ds, request)
 
     assert response.status == 302
@@ -323,6 +407,23 @@ async def test_dataset_view_renders_html(stub_provider):
 
     assert response.status == 200
     assert ds.rendered[0][0] == "open_data_dataset.html"
+
+
+@pytest.mark.parametrize("allow", [True, False])
+async def test_dataset_view_passes_can_load_to_template(stub_provider, allow):
+    """The Load button is hidden from actors who could not use it."""
+    ds = FakeDatasette(allow=allow)
+    await dataset_view(ds, FakeRequest(url_vars={"dataset_id": "d1"}))
+
+    assert ds.rendered[0][1]["can_load"] is allow
+
+
+@pytest.mark.parametrize("allow", [True, False])
+async def test_preview_view_passes_can_load_to_template(stub_provider, allow):
+    ds = FakeDatasette(allow=allow)
+    await resource_preview_view(ds, FakeRequest(url_vars={"resource_id": "r1"}))
+
+    assert ds.rendered[0][1]["can_load"] is allow
 
 
 async def test_preview_view_success(stub_provider):

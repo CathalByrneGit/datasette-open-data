@@ -343,6 +343,71 @@ async def test_show_dataset_reports_error(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+async def test_load_resource_denied_without_permission(monkeypatch, data_db):
+    """The tool writes directly, so it must enforce the permission itself or it
+    becomes a way around load_resource_view's check."""
+    called = False
+
+    async def fake_load_resource(**kwargs):
+        nonlocal called
+        called = True
+        return 1
+
+    monkeypatch.setattr("datasette_open_data.agent_tools.load_resource", fake_load_resource)
+
+    ds = FakeDatasette(databases={"data": data_db}, allow=False)
+    result = json.loads(await _tool_load_open_data_resource(ds, None, resource_id="r"))
+
+    assert "Permission denied" in result["error"]
+    assert "insert-row" in result["error"]
+    assert called is False
+
+
+async def test_load_resource_checks_permission_with_actor(monkeypatch, data_db):
+    class FakeProvider:
+        name = "alpha"
+        type = "ckan"
+
+        async def resource(self, resource_id):
+            return Resource(id=resource_id, name="t", datastore_active=True)
+
+    monkeypatch.setattr(
+        "datasette_open_data.agent_tools.get_provider", lambda ds, p: FakeProvider()
+    )
+
+    async def fake_load_resource(**kwargs):
+        return 1
+
+    monkeypatch.setattr("datasette_open_data.agent_tools.load_resource", fake_load_resource)
+
+    ds = FakeDatasette(databases={"data": data_db})
+    await _tool_load_open_data_resource(ds, {"id": "bob"}, resource_id="r")
+
+    action, resource, actor = ds.permission_checks[0]
+    assert action == "insert-row"
+    assert resource.parent == "data"
+    assert actor == {"id": "bob"}
+
+
+async def test_show_dataset_marks_load_as_post(monkeypatch):
+    class FakeProvider:
+        name = "alpha"
+        type = "ckan"
+
+        async def dataset(self, dataset_id):
+            return Dataset(id="d", name="d", title="T", resources=[Resource(id="r", format="CSV")])
+
+    monkeypatch.setattr(
+        "datasette_open_data.agent_tools.get_provider", lambda ds, p: FakeProvider()
+    )
+
+    result = json.loads(await _tool_show_open_data_dataset(FakeDatasette(), None, dataset_id="d"))
+    assert result["resources"][0]["load_method"] == "POST"
+    # rendered as a form, not a link the model might present as clickable
+    assert '<form method="POST"' in result["_html"]
+    assert ">Load</a>" not in result["_html"]
+
+
 async def test_load_resource_requires_data_database(monkeypatch):
     monkeypatch.setattr("datasette_open_data.agent_tools.get_provider", lambda ds, p: object())
     result = json.loads(await _tool_load_open_data_resource(FakeDatasette(), None, resource_id="r"))

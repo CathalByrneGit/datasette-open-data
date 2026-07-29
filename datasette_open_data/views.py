@@ -3,9 +3,24 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 
 from datasette import Response
+from datasette.resources import DatabaseResource
 
 from .loader import LoadError, load_resource, safe_table_name
 from .registry import get_provider, plugin_config, providers_from_config
+
+# Loading a resource creates a table in the 'data' database and inserts rows
+# into it, so it is gated on Datasette's own insert-row permission rather than
+# a bespoke one. That means existing allow blocks, API tokens and auth plugins
+# govern it with no extra configuration.
+LOAD_PERMISSION = "insert-row"
+
+
+async def _can_load(datasette, actor) -> bool:
+    return await datasette.allowed(
+        action=LOAD_PERMISSION,
+        resource=DatabaseResource(database="data"),
+        actor=actor,
+    )
 
 
 def _wants_json(request) -> bool:
@@ -531,6 +546,7 @@ async def dataset_view(datasette, request):
             "provider": provider,
             "dataset": dataset,
             "dataset_source": dataset_source,
+            "can_load": await _can_load(datasette, request.actor),
         },
         request=request,
     )
@@ -568,6 +584,7 @@ async def resource_preview_view(datasette, request):
             "provider": provider,
             "resource_id": resource_id,
             "preview": result,
+            "can_load": await _can_load(datasette, request.actor),
         },
         request=request,
     )
@@ -604,6 +621,25 @@ async def tags_view(datasette, request):
 
 
 async def load_resource_view(datasette, request):
+    # Loading writes to the database, so it must not be reachable by GET.
+    # Datasette's CSRF protection treats GET/HEAD/OPTIONS as safe, which would
+    # leave this endpoint triggerable cross-site by anything that can make the
+    # browser issue a request (an <img> tag, a link prefetcher, a crawler).
+    if request.method != "POST":
+        return _error_response(
+            request,
+            "Loading a resource modifies the database and requires POST.",
+            status=405,
+        )
+
+    if not await _can_load(datasette, request.actor):
+        return _error_response(
+            request,
+            f"Permission denied: loading a resource requires the "
+            f"{LOAD_PERMISSION!r} permission on the 'data' database.",
+            status=403,
+        )
+
     try:
         provider = get_provider(datasette, request.args.get("provider"))
     except (KeyError, ValueError) as exc:

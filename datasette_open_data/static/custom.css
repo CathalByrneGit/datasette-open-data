@@ -595,3 +595,10 @@ table.rows-and-columns td {
   margin: 5px 0 0 0 !important;
   color: #555 !important;
 }
+
+/* Load is a POST, so the button lives in a form; keep it inline with the
+   sibling link-buttons. */
+.open-data-load-form {
+  display: inline-block !important;
+  margin: 0 !important;
+}

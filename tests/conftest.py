@@ -55,10 +55,17 @@ class FakeDatabase:
 class FakeDatasette:
     """Stands in for the Datasette instance passed to views and agent tools."""
 
-    def __init__(self, databases=None, plugin_config=None):
+    def __init__(self, databases=None, plugin_config=None, allow=True):
         self.databases = databases or {}
         self._plugin_config = plugin_config
         self.rendered = []
+        # Permission outcome for allowed(); tests flip this to assert denial.
+        self.allow = allow
+        self.permission_checks = []
+
+    async def allowed(self, *, action, resource=None, actor=None):
+        self.permission_checks.append((action, resource, actor))
+        return self.allow
 
     def get_database(self, name):
         return self.databases[name]
@@ -72,10 +79,12 @@ class FakeDatasette:
 
 
 class FakeRequest:
-    def __init__(self, args=None, headers=None, url_vars=None):
+    def __init__(self, args=None, headers=None, url_vars=None, method="GET", actor=None):
         self.args = args or {}
         self.headers = headers or {}
         self.url_vars = url_vars or {}
+        self.method = method
+        self.actor = actor
 
 
 @pytest.fixture
