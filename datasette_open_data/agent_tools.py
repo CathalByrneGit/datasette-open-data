@@ -453,8 +453,8 @@ async def _tool_load_open_data_resource(
             }
         )
 
-    db_path = datasette.databases["data"].path
-    if db_path is None:
+    db = datasette.databases["data"]
+    if db.path is None:
         return json.dumps(
             {
                 "error": "The 'data' database is not file-backed. Resource loading requires a file database.",
@@ -472,7 +472,9 @@ async def _tool_load_open_data_resource(
         rows_loaded = await load_resource(
             provider=provider_obj,
             resource=resource,
-            db_path=db_path,
+            # The Datasette database, not its path: writes go through its
+            # serialised write connection rather than a second one.
+            destination=db,
             table=table_name,
             limit=int(limit or 50_000),
         )
