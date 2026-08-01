@@ -656,9 +656,9 @@ async def load_resource_view(datasette, request):
             status=400,
         )
 
-    db_path = datasette.databases["data"].path
+    db = datasette.databases["data"]
 
-    if db_path is None:
+    if db.path is None:
         return _error_response(
             request,
             "Cannot load resource: the 'data' database is not backed by a file.",
@@ -684,7 +684,9 @@ async def load_resource_view(datasette, request):
         rows_loaded = await load_resource(
             provider=provider,
             resource=resource,
-            db_path=db_path,
+            # The Datasette database, not its path: writes go through its
+            # serialised write connection rather than a second one.
+            destination=db,
             table=table,
             limit=limit,
         )

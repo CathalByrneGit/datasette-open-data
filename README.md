@@ -131,7 +131,7 @@ Agent workflows
 * Automatic schema creation
 * Incremental column discovery
 * `LoadError` for clean error reporting
-* Writes run off the event loop, so large loads don't block the server
+* Writes go through Datasette's serialised write connection, in batches
 
 ### Datasette
 
@@ -344,6 +344,25 @@ open-data-load \
   --table my_table
 ```
 
+The CLI has no Datasette instance to route through, so it writes straight to the file. Don't point it at a database a running Datasette is also writing to — see [How loads write](#how-loads-write).
+
+---
+
+## How loads write
+
+Datasette serialises every write to a database onto a single thread. Loads go through it rather than opening a connection of their own:
+
+| Caller | Write target | Why |
+|--------|--------------|-----|
+| Web route, agent tool | `Database.execute_write_fn()` | Shares Datasette's write connection |
+| `open-data-load` CLI | The SQLite file directly | No Datasette instance exists |
+
+Routing through `execute_write_fn` avoids `SQLITE_BUSY` against Datasette's own writes, keeps newly created tables visible to the instance without a restart, and picks up its transaction handling and event tracking. `sqlite_utils` issues no commits of its own, so it composes with that transaction rather than fighting it — which is what lets loads keep using `insert_all(alter=True)` for schema creation and incremental column discovery.
+
+Rows are written in batches of 5,000. The write thread is shared with the rest of the instance, so a 50,000-row load is a sequence of short writes instead of one long one that would block other writes until it finished.
+
+`load_resource()` accepts a Datasette database, a path, or any object with an `insert_rows()` method, resolved by `resolve_writer()`.
+
 ---
 
 ## Agent Tools
@@ -373,7 +392,7 @@ datasette-open-data/
 │   ├── __init__.py          # Datasette hooks and route registration
 │   ├── models.py            # Resource, DatasetSummary, Dataset dataclasses
 │   ├── registry.py          # Provider instantiation from config
-│   ├── loader.py            # DataStore and CSV loading (LoadError)
+│   ├── loader.py            # DataStore and CSV loading; write targets
 │   ├── views.py             # Route handlers
 │   ├── agent_tools.py       # LLM agent tool definitions
 │   ├── cli.py               # CLI entry point
@@ -397,6 +416,7 @@ datasette-open-data/
 │   ├── test_build_catalog.py     # End-to-end catalog builds
 │   ├── test_agent_tools.py
 │   ├── test_loader.py
+│   ├── test_loader_writers.py    # Write targets and batching
 │   ├── test_registry.py
 │   ├── test_views.py             # Pure helpers
 │   └── test_view_handlers.py     # Route handlers and error paths

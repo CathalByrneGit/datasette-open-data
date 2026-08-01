@@ -18,15 +18,26 @@ def main() -> None:
     args = parser.parse_args()
 
     async def run():
+        # No Datasette instance here, so writes go straight to the file rather
+        # than through a serialised write connection. Don't run this against a
+        # database a live Datasette is writing to.
         if args.csv_url:
-            count = await load_csv_url(args.csv_url, args.database, args.table)
+            count = await load_csv_url(
+                csv_url=args.csv_url,
+                destination=args.database,
+                table=args.table,
+            )
         else:
             if not args.resource_id:
                 parser.error("Provide --resource-id or --csv-url")
             providers = providers_from_config(DEFAULT_CONFIG)
             provider = providers[args.provider]
             count = await load_datastore_resource(
-                provider, args.resource_id, args.database, args.table, args.limit
+                provider=provider,
+                resource_id=args.resource_id,
+                destination=args.database,
+                table=args.table,
+                limit=args.limit,
             )
         print(f"Loaded {count} rows into {args.database}:{args.table}")
 
